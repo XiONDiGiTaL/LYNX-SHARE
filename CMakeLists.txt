@@ -182,6 +182,8 @@ target_sources(lynx_core PRIVATE
     src/core/RackOps.cpp
     src/core/ChannelMiscFx.cpp
     src/core/MidiImport.cpp
+    src/core/ThemeKits.cpp
+    src/core/ForeignProject.cpp
     src/core/StartupSound.cpp)
 
 # workflow P2 (note tools, mixer operations, history labels, browser search)

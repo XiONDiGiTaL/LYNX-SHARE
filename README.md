@@ -185,10 +185,10 @@ Any knob or fader (channel, mixer, effect, plugin parameter) becomes a clip with
 
 #### Projects and files
 - Native `.lynx` format (JSON) with autosave
-- Imports `.flp` and `.mid`; FL `.fst` presets
+- Imports `.flp` and `.mid`, plus Cubase `.cpr` / `.npr` and Cakewalk `.cwp` / `.cwb` / `.wrk` tracks and notes (`docs/FOREIGN_PROJECTS.md`); FL `.fst` presets
 - Exports WAV 16/24/32f, FLAC and OGG, song or pattern, with dither
 - Note recording (PC keyboard and MIDI) and audio recording, sample-accurate with a round-trip ping, punch in/out with pre/post-roll, loop takes and comping, crash-safe takes
-- Themes (accent color, background, workspace image) and plugin presets
+- Themes (accent color, background, workspace image), ten food theme kits (`docs/THEME_KITS.md`) and plugin presets
 - Undo/redo on every edit
 - Opt-in crash and freeze reports (anonymous), or a prefilled GitHub bug report
 - Audio drivers: Windows Audio (WASAPI), DirectSound and ASIO on Windows; Core Audio on macOS; PipeWire (native), JACK and ALSA on Linux

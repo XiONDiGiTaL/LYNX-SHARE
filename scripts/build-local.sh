@@ -18,6 +18,8 @@ CORE="src/flp/Flp.cpp src/core/Song.cpp src/core/MarkerPlan.cpp src/core/NoteEdi
 mkdir -p build-local build-local/wavpack
 # workflow shell (key map, workspace layout, rack operations)
 CORE="$CORE src/core/KeyMap.cpp src/core/Workspace.cpp src/core/RackOps.cpp src/core/ChannelMiscFx.cpp src/core/MidiImport.cpp"
+# food theme kits and the Cubase / Cakewalk project reader
+CORE="$CORE src/core/ThemeKits.cpp src/core/ForeignProject.cpp"
 # workflow P2 (note tools, mixer operations, history labels, browser search)
 CORE="$CORE src/core/NoteTools.cpp src/core/PianoRollTools.cpp src/core/EventEdit.cpp src/core/AudioEdit.cpp src/core/AudioEditTools.cpp src/core/FlAutoSlicer.cpp src/core/MixerOps.cpp src/core/History.cpp src/core/SearchQuery.cpp src/core/SearchIndex.cpp src/core/SearchService.cpp src/core/BrowserView.cpp src/core/EffectPresets.cpp src/core/PluginPresets.cpp src/core/ParamHelp.cpp"
 # start-up sound (procedural)

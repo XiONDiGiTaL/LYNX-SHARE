@@ -4,6 +4,8 @@
 #include <cctype>
 #include <cmath>
 
+#include "core/ThemeKits.h"
+
 namespace lynx::themes
 {
 namespace
@@ -153,10 +155,14 @@ const std::vector<Spec>& builtInThemes()
             s.background = background;
             return s;
         };
-        return std::vector<Spec> {
+        auto themes = std::vector<Spec> {
             make ("LYNX", defaultAccent, defaultBackground), make ("Ocean", 0xff3d8bfd, 0xff12161d), make ("Emerald", 0xff2fbf71, 0xff131715),
             make ("Amber", 0xfff0a020, 0xff17150f),          make ("Violet", 0xff9d6bff, 0xff16141c), make ("Graphite", 0xffd5d8de, 0xff141414),
         };
+        // the food kits (core/ThemeKits.h): the same token engine, seeded with a fruit's own colour
+        for (auto& kit : kitThemes())
+            themes.push_back (std::move (kit));
+        return themes;
     }();
     return all;
 }

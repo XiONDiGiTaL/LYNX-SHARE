@@ -15,6 +15,7 @@
 #include "platform/Paths.h"
 #include "ui/SetupWizard.h"
 #include "core/FlPluginDb.h"
+#include "core/ForeignProject.h"
 #include "core/Preferences.h"
 
 #include "core/EditorPolish.h"
@@ -3945,7 +3946,7 @@ void MainComponent::chooseFileToOpen()
 void MainComponent::chooseFileToOpenNow()
 {
     fileChooser = std::make_unique<juce::FileChooser> (tr ("Open project"), currentFile.getParentDirectory(),
-                                                       juce::String ("*") + ProjectFile::extension + ";*.dawproj;*.flp;*.zip;*.mid;*.midi");
+                                                       juce::String ("*") + ProjectFile::extension + ";*.dawproj;*.flp;*.zip;*.mid;*.midi;*.cpr;*.npr;*.cwp;*.cwb;*.cwz;*.wrk");
 
     fileChooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
                               [this] (const juce::FileChooser& chooser) {
@@ -4020,7 +4021,59 @@ void MainComponent::openFile (const juce::File& file)
         return;
     }
 
+    if (file.hasFileExtension ("cpr;npr;cwp;cwb;cwz;wrk"))
+    {
+        importForeignProject (file);
+        return;
+    }
+
     openLynxProject (file);
+}
+
+void MainComponent::importForeignProject (const juce::File& file)
+{
+    foreign::Report report;
+    std::string readError;
+    if (! foreign::readFile (file.getFullPathName().toStdString(), report, readError))
+    {
+        juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon, tr ("Could not open"),
+                                                juce::String::fromUTF8 (readError.c_str()));
+        return;
+    }
+
+    if (! report.hasNotes())
+    {
+        juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon, tr ("Could not open"),
+                                                juce::String::fromUTF8 (report.summary().c_str()));
+        return;
+    }
+
+    Song song;
+    midiimport::Options options;
+    options.perTrack = true;
+    std::string importError;
+    if (! foreign::importInto (song, report, options, file.getFileNameWithoutExtension().toStdString(), importError))
+    {
+        juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon, tr ("Could not open"),
+                                                juce::String::fromUTF8 (importError.c_str()));
+        return;
+    }
+
+    engine.stop();
+    engine.rewind();
+    engine.setSong (std::move (song));
+    currentFile = juce::File(); // imported: "Save" asks where to write the .lynx
+    importedFlpFile = juce::File();
+    projectName = file.getFileNameWithoutExtension();
+    importedSuffix = " (" + juce::String (foreign::formatName (report.format)) + ")";
+    rememberRecent (file);
+    updateTitle();
+    playlist.showSongAfterOpen();
+
+    // what the reader recovered and what it could not (audio clips, plugin tokens, undecoded event streams)
+    if (! report.findings.empty())
+        juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::InfoIcon, tr ("Imported"),
+                                                juce::String::fromUTF8 (report.summary().c_str()));
 }
 
 void MainComponent::importFlp (const juce::File& file)
