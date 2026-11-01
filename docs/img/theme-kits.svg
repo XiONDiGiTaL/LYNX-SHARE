@@ -1,0 +1,83 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1190 150" width="1190" height="150" role="img" aria-label="The ten food theme kits: Banana, Eggplant, Blueberry, Lime, Watermelon, Mango, Cherry, Avocado, Dragonfruit and Lychee">
+  <rect x="0" y="0" width="1190" height="150" fill="#0b0b0c"/>
+
+  <!-- Banana -->
+  <g>
+    <rect x="0" y="0" width="110" height="150" rx="10" fill="#17150D" stroke="#F2C21B" stroke-opacity="0.45"/>
+    <rect x="14" y="26" width="82" height="32" rx="6" fill="#F2C21B"/>
+    <text x="55" y="86" text-anchor="middle" font-family="-apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="13" fill="#F2C21B">Banana</text>
+    <text x="55" y="108" text-anchor="middle" font-family="-apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="10" fill="#8a8a8a">#F2C21B</text>
+  </g>
+
+  <!-- Eggplant -->
+  <g>
+    <rect x="120" y="0" width="110" height="150" rx="10" fill="#141019" stroke="#8F5BD6" stroke-opacity="0.45"/>
+    <rect x="134" y="26" width="82" height="32" rx="6" fill="#8F5BD6"/>
+    <text x="175" y="86" text-anchor="middle" font-family="-apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="13" fill="#8F5BD6">Eggplant</text>
+    <text x="175" y="108" text-anchor="middle" font-family="-apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="10" fill="#8a8a8a">#8F5BD6</text>
+  </g>
+
+  <!-- Blueberry -->
+  <g>
+    <rect x="240" y="0" width="110" height="150" rx="10" fill="#0F1320" stroke="#4E6BE8" stroke-opacity="0.45"/>
+    <rect x="254" y="26" width="82" height="32" rx="6" fill="#4E6BE8"/>
+    <text x="295" y="86" text-anchor="middle" font-family="-apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="13" fill="#4E6BE8">Blueberry</text>
+    <text x="295" y="108" text-anchor="middle" font-family="-apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="10" fill="#8a8a8a">#4E6BE8</text>
+  </g>
+
+  <!-- Lime -->
+  <g>
+    <rect x="360" y="0" width="110" height="150" rx="10" fill="#12150E" stroke="#A6D81C" stroke-opacity="0.45"/>
+    <rect x="374" y="26" width="82" height="32" rx="6" fill="#A6D81C"/>
+    <text x="415" y="86" text-anchor="middle" font-family="-apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="13" fill="#A6D81C">Lime</text>
+    <text x="415" y="108" text-anchor="middle" font-family="-apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="10" fill="#8a8a8a">#A6D81C</text>
+  </g>
+
+  <!-- Watermelon -->
+  <g>
+    <rect x="480" y="0" width="110" height="150" rx="10" fill="#101614" stroke="#FF5C73" stroke-opacity="0.45"/>
+    <rect x="494" y="26" width="82" height="32" rx="6" fill="#FF5C73"/>
+    <text x="535" y="86" text-anchor="middle" font-family="-apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="13" fill="#FF5C73">Watermelon</text>
+    <text x="535" y="108" text-anchor="middle" font-family="-apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="10" fill="#8a8a8a">#FF5C73</text>
+  </g>
+
+  <!-- Mango -->
+  <g>
+    <rect x="600" y="0" width="110" height="150" rx="10" fill="#1A1209" stroke="#FF9E1F" stroke-opacity="0.45"/>
+    <rect x="614" y="26" width="82" height="32" rx="6" fill="#FF9E1F"/>
+    <text x="655" y="86" text-anchor="middle" font-family="-apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="13" fill="#FF9E1F">Mango</text>
+    <text x="655" y="108" text-anchor="middle" font-family="-apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="10" fill="#8a8a8a">#FF9E1F</text>
+  </g>
+
+  <!-- Cherry -->
+  <g>
+    <rect x="720" y="0" width="110" height="150" rx="10" fill="#160F11" stroke="#D92B45" stroke-opacity="0.45"/>
+    <rect x="734" y="26" width="82" height="32" rx="6" fill="#D92B45"/>
+    <text x="775" y="86" text-anchor="middle" font-family="-apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="13" fill="#D92B45">Cherry</text>
+    <text x="775" y="108" text-anchor="middle" font-family="-apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="10" fill="#8a8a8a">#D92B45</text>
+  </g>
+
+  <!-- Avocado -->
+  <g>
+    <rect x="840" y="0" width="110" height="150" rx="10" fill="#12140F" stroke="#7FB53A" stroke-opacity="0.45"/>
+    <rect x="854" y="26" width="82" height="32" rx="6" fill="#7FB53A"/>
+    <text x="895" y="86" text-anchor="middle" font-family="-apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="13" fill="#7FB53A">Avocado</text>
+    <text x="895" y="108" text-anchor="middle" font-family="-apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="10" fill="#8a8a8a">#7FB53A</text>
+  </g>
+
+  <!-- Dragonfruit -->
+  <g>
+    <rect x="960" y="0" width="110" height="150" rx="10" fill="#170F18" stroke="#FF4FA3" stroke-opacity="0.45"/>
+    <rect x="974" y="26" width="82" height="32" rx="6" fill="#FF4FA3"/>
+    <text x="1015" y="86" text-anchor="middle" font-family="-apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="12" fill="#FF4FA3">Dragonfruit</text>
+    <text x="1015" y="108" text-anchor="middle" font-family="-apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="10" fill="#8a8a8a">#FF4FA3</text>
+  </g>
+
+  <!-- Lychee -->
+  <g>
+    <rect x="1080" y="0" width="110" height="150" rx="10" fill="#161114" stroke="#F2A0B5" stroke-opacity="0.45"/>
+    <rect x="1094" y="26" width="82" height="32" rx="6" fill="#F2A0B5"/>
+    <text x="1135" y="86" text-anchor="middle" font-family="-apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="13" fill="#F2A0B5">Lychee</text>
+    <text x="1135" y="108" text-anchor="middle" font-family="-apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="10" fill="#8a8a8a">#F2A0B5</text>
+  </g>
+</svg>

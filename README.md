@@ -19,6 +19,8 @@ Windows, macOS and Linux.</p>
   <a href="https://github.com/Ka1-S/LYNX-SHARE/releases"><strong>Download</strong></a> ·
   <a href="#features"><strong>Features</strong></a> ·
   <a href="#opens-fl-studio-projects">FL projects</a> ·
+  <a href="#opens-cubase-nuendo-and-cakewalk-projects">Other DAWs</a> ·
+  <a href="#food-theme-kits">Theme kits</a> ·
   <a href="docs/PLUGINS.md">Built-in plugins</a> ·
   <a href="#building">Building</a> ·
   <a href="docs/STATUS.md">Status</a> ·
@@ -248,6 +250,77 @@ A report lists what was converted, what is approximated and what was left out. F
 > [!NOTE]
 > Every conversion rule comes from **behavioural** reverse engineering (decompilation studied, official manual and project data), recorded in [`docs/analise/`](docs/analise). Anything not confirmed is flagged as an approximation in [`docs/STATUS.md`](docs/STATUS.md).
 
+## Opens Cubase, Nuendo and Cakewalk projects
+
+Besides `.flp` and `.mid`, *File > Open* takes the projects Steinberg and Cakewalk / BandLab write, and brings back the
+part LYNX can honour: the tracks and the notes on them.
+
+| Format | Container | What comes in |
+|---|---|---|
+| `.cpr`, `.npr` (Cubase, Nuendo) | RIFF tree under Steinberg's eight-character `NUNDROOT` form type | the project's version, the plugin UIDs it references, and every standard MIDI part inside it, as notes on tracks |
+| `.cwp`, `.cwb` (Cakewalk, SONAR, BandLab) | OLE2 compound file | the standard MIDI parts inside it, as notes on tracks |
+| `.cwz` | Cakewalk's zip package | identified as a package, and the reader points at the `.cwp` inside |
+| `.wrk` (older Cakewalk) | tag/length chunk stream | the validated chunk walk, the track names and the Cakewalk version |
+| `.mid`, `.midi` | standard MIDI file | notes, tempo, time signature and track names |
+
+Notes land exactly as a `.mid` import lands: one Channel Rack channel per track, a new pattern named after the file,
+tempo and time signature carried over, the source kept in the title (`Song (Cubase)`), and the file added to Recents. A
+summary then states what happened - the format, the tracks and notes, each track's name and channel, the plugin UIDs the
+project references, and anything in the container LYNX has no equivalent for.
+
+### Read exactly, or reported
+
+Cubase, Nuendo and Cakewalk each keep their events in a proprietary structure, and none of those structures is
+published. What all three have in common is standard MIDI: they embed MIDI parts inside the project and export MIDI
+files. That is what the reader parses, with its own SMF reader (formats 0, 1 and 2, running status, tempo, time
+signature, track names, converted to LYNX's 960 ticks per quarter note), so the notes that arrive are the project's own
+rather than an interpretation of its binary layout. A container that cannot be read in a form that validates is
+reported instead of half-parsed - a truncated file or a wrong signature stops there, and the dialog says so.
+
+The reader is plain C++ with no JUCE in it, so it ships under the same test suite as the rest of the core, fixtures and
+all (a `NUNDROOT` project, a `.wrk` record stream, an OLE2 file carrying MIDI, a synthetic SMF):
+
+```
+./scripts/build-local.sh
+```
+
+Details, format by format: [`docs/FOREIGN_PROJECTS.md`](docs/FOREIGN_PROJECTS.md).
+
+## Food theme kits
+
+<p align="center">
+  <img src="docs/img/theme-kits.svg" alt="Ten food theme kits: Banana, Eggplant, Blueberry, Lime, Watermelon, Mango, Cherry, Avocado, Dragonfruit and Lychee" width="100%">
+  <br><sub>Ten kits in <em>Options > Theme</em>, after the six built-in looks.</sub>
+</p>
+
+A kit is a seed, not a painted skin. Give it an accent and a background and the theme engine derives everything else the
+interface draws with: panel elevations, hairlines, hover and pressed shades, tinted selections, note colours, and text
+that stays readable on both. Two hex values per kit, and nothing about it can drift out of relation with the rest of the
+window - the light accents (Banana, Lime, Lychee) take dark ink on the accent automatically.
+
+| Kit | Accent | Background |
+|---|---|---|
+| Banana | `#F2C21B` | `#17150D` |
+| Eggplant | `#8F5BD6` | `#141019` |
+| Blueberry | `#4E6BE8` | `#0F1320` |
+| Lime | `#A6D81C` | `#12150E` |
+| Watermelon | `#FF5C73` | `#101614` |
+| Mango | `#FF9E1F` | `#1A1209` |
+| Cherry | `#D92B45` | `#160F11` |
+| Avocado | `#7FB53A` | `#12140F` |
+| Dragonfruit | `#FF4FA3` | `#170F18` |
+| Lychee | `#F2A0B5` | `#161114` |
+
+- **One line to add one.** A kit is an entry in `src/core/ThemeKits.cpp`, and `findKit("coffee")` resolves it by stable
+  id or by its label, so a preset or a layout remembers the kit while the menu shows the name.
+- **Measured, not eyeballed.** The core tests check every kit, not just the one being edited: at least 7:1 contrast for
+  text on panels and 3:1 on the accent, `accentHover` lighter and `accentPressed` darker than the accent, ids and names
+  unique.
+- **Nothing else moved.** Kits arrive through the same `builtInThemes()` list as the six built-in looks, so the theme
+  page, the accent/background overrides and the colours saved in projects behave exactly as before.
+
+Details: [`docs/THEME_KITS.md`](docs/THEME_KITS.md).
+
 ## Download
 
 Every release on the [latest release page](https://github.com/Ka1-S/LYNX-SHARE/releases) has builds for all three
@@ -425,6 +498,8 @@ docs/         architecture, status, roadmap and the behavioural analysis of FL S
 |---|---|
 | [`docs/STATUS.md`](docs/STATUS.md) | what works, what is approximated and what is missing |
 | [`docs/PLUGINS.md`](docs/PLUGINS.md) | the built-in plugins, what each one is compatible with, and its status |
+| [`docs/FOREIGN_PROJECTS.md`](docs/FOREIGN_PROJECTS.md) | what the Cubase, Nuendo, Cakewalk and BandLab readers bring in |
+| [`docs/THEME_KITS.md`](docs/THEME_KITS.md) | the food theme kits, how a kit becomes tokens and how to add one |
 | [`docs/ROADMAP.md`](docs/ROADMAP.md) | project phases |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | how the engine and the UI are organised |
 | [`docs/CODE_SIGNING.md`](docs/CODE_SIGNING.md) | how releases are built and code-signed (SignPath) |
