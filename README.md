@@ -400,8 +400,10 @@ Details: [`docs/THEME_KITS.md`](docs/THEME_KITS.md).
 
 ## Download
 
-Every release on the [latest release page](https://github.com/XiONDiGiTaL/LYNX-SHARE/releases) has builds for all three
-platforms (`<v>` is the version, e.g. `0.1.22-alpha`):
+Every release on the [latest release page](https://github.com/XiONDiGiTaL/LYNX-SHARE/releases) lists the builds it carries
+(`<v>` is the version, e.g. `0.1.22-alpha`). 0.1.22 has Windows and Linux: this fork's Actions account has no macOS
+runner, so the `.dmg` is built from the same tagged source wherever a macOS runner is available, or locally with
+`cmake -B build -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"` ([macOS](#macos)).
 
 | OS | Download | Notes |
 |---|---|---|
