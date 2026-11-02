@@ -461,22 +461,27 @@ void paintLogo (Graphics& g, Rectangle<float> area, const themes::Kit& kit)
         return;
 
     const auto accent = opaque (kit.accent);
-    const auto ink = Colour (themes::readableTextOn (kit.accent));
+    const auto background = opaque (kit.background);
+    const auto leaf = opaque (kit.leaf);
     const auto corner = square.getWidth() * 0.22f;
 
     Path body;
     body.addRoundedRectangle (square, corner);
-    g.setGradientFill (juce::ColourGradient (accent.brighter (0.14f), square.getX(), square.getY(), accent.darker (0.26f), square.getX(),
+    // The square is the kit's own dark surface, not its accent: the fruit keeps its colours on it (a banana in ink on a
+    // yellow square was a black crescent), and the accent comes in as the glowing edge, as on the badge.
+    g.setGradientFill (juce::ColourGradient (background.brighter (0.16f), square.getX(), square.getY(), background.darker (0.55f), square.getX(),
                                             square.getBottom(), false));
     g.fillPath (body);
 
-    // a soft light from the top left, and the edge
-    g.setGradientFill (juce::ColourGradient (juce::Colours::white.withAlpha (0.18f), square.getX(), square.getY(), juce::Colours::transparentWhite,
+    // a soft light from the top left, then the accent's edge and the halo outside it
+    g.setGradientFill (juce::ColourGradient (juce::Colours::white.withAlpha (0.10f), square.getX(), square.getY(), juce::Colours::transparentWhite,
                                             square.getRight(), square.getBottom(), false));
     g.fillPath (body);
-    g.setColour (accent.darker (0.42f));
-    g.strokePath (body, juce::PathStrokeType (juce::jmax (1.0f, square.getWidth() * 0.014f)));
+    g.setColour (accent.withAlpha (0.20f));
+    g.drawRoundedRectangle (square.expanded (square.getWidth() * 0.035f), corner, juce::jmax (1.0f, square.getWidth() * 0.012f));
+    g.setColour (accent.withAlpha (0.85f));
+    g.strokePath (body, juce::PathStrokeType (juce::jmax (1.0f, square.getWidth() * 0.016f)));
 
-    paintMark (g, square.reduced (square.getWidth() * 0.20f), kit, ink, ink.withAlpha (0.62f));
+    paintMark (g, square.reduced (square.getWidth() * 0.185f), kit, accent, leaf);
 }
 } // namespace lynx::food

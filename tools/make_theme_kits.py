@@ -61,15 +61,6 @@ def col(c, alpha=1.0):
     return "rgb(%d,%d,%d)" % c if alpha >= 1.0 else "rgba(%d,%d,%d,%.3f)" % (c[0], c[1], c[2], alpha)
 
 
-def luminance(c):
-    return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]
-
-
-def readable_on(c):
-    """White unless the colour is clearly light, as themes::readableTextOn does."""
-    return (255, 255, 255) if luminance(c) < 148 else (17, 18, 20)
-
-
 def css(value):
     """A colour as an SVG string: the marks pass (r, g, b) tuples, the page passes #RRGGBB."""
     return col(value) if isinstance(value, tuple) else value
@@ -455,17 +446,21 @@ def badge(s, kit, cx, cy, size, selected=False):
 
 
 def logo(s, kit, x, y, size):
+    # FoodGlyphs.cpp's paintLogo: the kit's own dark surface, the accent as its edge and a halo outside it, and the
+    # fruit in its fruit colours - so the banana stays yellow instead of turning into a silhouette.
     key, name, hue, taste, accent, leafc, bg, ws = kit
-    accent_rgb = rgb(accent)
-    ink = readable_on(accent_rgb)
+    accent_rgb, leaf, bg_rgb = rgb(accent), rgb(leafc), rgb(bg)
     radius = size * 0.22
     gid = "logo-" + key
-    s.defs_gradient(gid, brighter(accent_rgb, 0.14), darker(accent_rgb, 0.26))
+    s.defs_gradient(gid, brighter(bg_rgb, 0.16), darker(bg_rgb, 0.55))
     s.rect((x, y, x + size, y + size), fill="url(#%s)" % gid, rx=radius)
-    s.rect((x, y, x + size, y + size), rx=radius, stroke=darker(accent_rgb, 0.42), width=size * 0.014)
-    inner = size * 0.60
-    MARKS.get(key, pepper)(s, Canvas(s, (x + (size - inner) / 2, y + (size - inner) / 2, inner)), ink,
-                           mix(ink, accent_rgb, 0.38))
+    # a blended halo and edge, because neither backend strokes with an opacity
+    pad = size * 0.035
+    s.rect((x - pad, y - pad, x + size + pad, y + size + pad), rx=radius + pad,
+           stroke=mix(bg_rgb, accent_rgb, 0.20), width=max(1.0, size * 0.012))
+    s.rect((x, y, x + size, y + size), rx=radius, stroke=mix(bg_rgb, accent_rgb, 0.85), width=max(1.0, size * 0.016))
+    inner = size * 0.63
+    MARKS.get(key, pepper)(s, Canvas(s, (x + (size - inner) / 2, y + (size - inner) / 2, inner)), accent_rgb, leaf)
 
 
 CARD_W, CARD_H, COLS = 158, 196, 7
@@ -499,7 +494,7 @@ def build(s):
     for i, kit in enumerate(logos):
         logo(s, kit, 24 + i * (logo_size + gap), strip_y + 26, logo_size)
 
-    s.text(WIDTH - 24, HEIGHT - 12, "the same fruit in the logo, in each theme's accent", 9, "#4a4e57",
+    s.text(WIDTH - 24, HEIGHT - 12, "the same fruit on the logo's tile, edged in each theme's accent", 9, "#4a4e57",
            weight="500", anchor="end")
     return s
 

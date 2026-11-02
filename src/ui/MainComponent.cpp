@@ -4974,7 +4974,8 @@ std::unique_ptr<juce::AlertWindow> MainComponent::makeAboutWindow()
         Logo() { setSize (300, 150); }
 
         // The food logo (ui/FoodGlyphs.h): the theme's fruit - LYNX's pepper for the default look and hand-made
-        // colours - in a rounded square of the theme's accent, with the theme's name and caption beside it.
+        // colours - on a rounded square of the kit's dark surface, edged in its accent, with the theme's name and
+        // caption beside it.
         void paint (juce::Graphics& g) override
         {
             using namespace theme;

@@ -18,7 +18,7 @@ void paintMark (juce::Graphics&, juce::Rectangle<float> area, const themes::Kit&
 // and thickens the ring. `area` is square; the disc fills it.
 void paintBadge (juce::Graphics&, juce::Rectangle<float> area, const themes::Kit&, bool selected);
 
-// LYNX SHARE's food logo: a rounded square in the kit's accent with the fruit on it, in the ink that reads on that
-// accent. `area` is square.
+// LYNX SHARE's food logo: a rounded square in the kit's own dark surface, edged and haloed in its accent, with the
+// fruit on it in the colours the badge uses. `area` is square.
 void paintLogo (juce::Graphics&, juce::Rectangle<float> area, const themes::Kit&);
 } // namespace lynx::food

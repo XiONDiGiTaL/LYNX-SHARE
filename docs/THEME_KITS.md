@@ -42,10 +42,11 @@ badge's second colour. Light accents (Banana, Kiwi, Lime, Coconut) get dark ink 
   a ring glowing in the kit's accent, the fruit on it, the name and `HUE | TASTE` under it. Clicking one applies the
   kit - accent, background, workspace and name - like a preset. The dropdown above still lists the six built-in looks,
   the thirteen kits and your own `.lynxtheme` presets.
-- **The logo** (`ui/FoodGlyphs.h`) is the same fruit in a rounded square of the theme's accent, in the ink that reads on
-  it. It is the mark in the About window, next to the theme's name and caption. LYNX's own look and hand-made colours
-  (Ocean, Emerald, a custom accent) show the pepper instead, in their own accent: `kitFor(spec)` always returns
-  something to draw.
+- **The logo** (`ui/FoodGlyphs.h`) is the same fruit on a rounded square of the kit's own dark surface, with the accent
+  as the edge and a halo outside it - the badge's idea in a square, so the fruit keeps its colours (a yellow banana, a
+  blue blueberry) instead of turning into a silhouette. It is the mark in the About window, next to the theme's name
+  and caption, and the object the start-up splash drops. LYNX's own look and hand-made colours (Ocean, Emerald, a custom
+  accent) show the pepper instead, in their own accent: `kitFor(spec)` always returns something to draw.
 
 Everything is drawn with `juce::Path` and primitives from a unit square (0..1, y down), so a mark works at 16 px in the
 hero and at 112 px in the gallery, and picks up the theme's colours live. Nothing is loaded from disk.

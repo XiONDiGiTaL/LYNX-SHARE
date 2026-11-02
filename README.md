@@ -301,9 +301,10 @@ deeper surface of the same family, so the fruit reaches the backdrop behind the 
 
 Each kit carries the identity the theme page draws: its fruit, the words of its caption (`KIWI | GREEN | TART`) and the
 colour of its leaf or skin. `Options > Theme` shows them as the badges the themes were designed around - a dark disc with
-a ring glowing in the kit's accent and the fruit on it - and the same fruit goes into LYNX SHARE's logo and the About
-window. Nothing is loaded from disk: the marks are vector paths (`src/ui/FoodGlyphs.cpp`), so they follow the theme and
-stay crisp at every size.
+a ring glowing in the kit's accent and the fruit on it - and the same fruit sits on LYNX SHARE's logo tile, a rounded
+square of the kit's dark surface edged and haloed in its accent, in the About window and on the start-up splash.
+Nothing is loaded from disk: the marks are vector paths (`src/ui/FoodGlyphs.cpp`), so they follow the theme and stay
+crisp at every size.
 
 | Kit | Caption | Accent | Background | Workspace |
 |---|---|---|---|---|
@@ -330,8 +331,43 @@ stay crisp at every size.
 - **Nothing else moved.** Kits arrive through the same `builtInThemes()` list as the six built-in looks, so the theme
   page, the accent/background overrides and the colours saved in projects behave exactly as before; the gallery, the
   badge and the logo are additive.
-- **The picture is generated.** `python tools/make_theme_kits.py` rewrites `docs/img/theme-kits.svg` from the kit table
-  with the same unit-space fruit geometry the app draws (add `--png out.png` for a quick preview).
+- **The pictures are the app.** The screenshots below are `LYNX.exe --snapshot` renders with `LYNX_SNAPSHOT_THEME`
+  pointed at a `.lynxtheme` (the song is `LYNX.exe --showcase song.lynx`), so any theme can be re-rendered in one
+  command. The badge sheet above is drawn instead: `python tools/make_theme_kits.py` rewrites `docs/img/theme-kits.svg`
+  from the kit table with the same unit-space fruit geometry the app draws (add `--png out.png` for a quick preview).
+
+### In the app
+
+<table>
+<tr>
+<td width="50%" valign="top">
+<img src="docs/img/theme-gallery.png" alt="Options > Theme in the Banana theme: the theme's logo, caption and seeds above the food gallery of thirteen badges">
+<br><sub><strong>Options > Theme</strong>, Banana applied: the theme's logo, name, caption and three seeds at the top, and
+the food gallery under it - every kit as its badge, the one in use ringed brighter. A click applies that kit.</sub>
+</td>
+<td width="50%" valign="top">
+<img src="docs/img/theme-splash.png" alt="The start-up splash in the Banana theme: the banana logo landing on the card">
+<br><sub><strong>The start-up splash</strong> drops the same fruit - the theme's logo - over a card and a wordmark in its
+accent, so Blueberry opens blue and Dragonfruit pink.</sub>
+</td>
+</tr>
+</table>
+
+The demo project (`--showcase`) in six of the kits: the accent reaches the steps, the notes, the selection, the playhead
+and the meters, while the surfaces under the panels stay the kit's dark gray, tinted towards its fruit.
+
+<table>
+<tr>
+<td width="33%" valign="top"><img src="docs/img/theme-mango.png" alt="The LYNX SHARE workspace in the Mango theme"><br><sub><strong>Mango</strong> | ORANGE | TROPICAL</sub></td>
+<td width="33%" valign="top"><img src="docs/img/theme-banana.png" alt="The LYNX SHARE workspace in the Banana theme"><br><sub><strong>Banana</strong> | YELLOW | SWEET</sub></td>
+<td width="33%" valign="top"><img src="docs/img/theme-kiwi.png" alt="The LYNX SHARE workspace in the Kiwi theme"><br><sub><strong>Kiwi</strong> | GREEN | TART</sub></td>
+</tr>
+<tr>
+<td width="33%" valign="top"><img src="docs/img/theme-blueberry.png" alt="The LYNX SHARE workspace in the Blueberry theme"><br><sub><strong>Blueberry</strong> | BLUE | BERRY</sub></td>
+<td width="33%" valign="top"><img src="docs/img/theme-eggplant.png" alt="The LYNX SHARE workspace in the Eggplant theme"><br><sub><strong>Eggplant</strong> | PURPLE | RICH</sub></td>
+<td width="33%" valign="top"><img src="docs/img/theme-dragonfruit.png" alt="The LYNX SHARE workspace in the Dragonfruit theme"><br><sub><strong>Dragonfruit</strong> | VIOLET | EXOTIC</sub></td>
+</tr>
+</table>
 
 Details: [`docs/THEME_KITS.md`](docs/THEME_KITS.md).
 
