@@ -383,6 +383,7 @@ if(LYNX_BUILD_APP)
         src/ui/VfxEditors.cpp
         src/ui/BrowserComponent.cpp
         src/ui/Theme.cpp
+        src/ui/FoodGlyphs.cpp
         src/ui/ThemeSettings.cpp
         src/ui/ColourPicker.cpp
         src/ui/Icons.cpp

@@ -769,7 +769,8 @@ search stepping, instrument drops on mixer inserts, record filters for automatio
   - colour scheme or skins;
   - step-button, LED, knob or fader art;
   - window title-bar *art* (the arrangement of its parts, see section 5, is followed);
-  - splash, mascot or logo (LYNX's splash uses its own pepper and its own synthesised sound).
+  - splash, mascot or logo (LYNX's splash drops its own food logo - the fruit of the theme in use, its pepper for the
+    default look - and plays its own synthesised sound).
   Since October 2026 the *arrangement* of the toolbar panels and window title bars follows FL's (section 5,
   the user's decision); everything is still drawn by LYNX.
 - **Names.** Generic terms are fine: Channel Rack, Step sequencer, Piano Roll, Playlist, Mixer, Browser,
@@ -974,8 +975,10 @@ left for later (P2).
 - FL shows a splash with its version while it starts. A General setting turns it off. [DOC][envgen]
 
 **LYNX** (`ui/Splash.*`, `core/StartupSound.*`):
-- A splash of its own: the user's pepper drops onto a dark card and bounces, then "LYNX" and the version slide
-  in while the audio engine and the workspace load. It lasts about 2 s.
+- A splash of its own: the food logo of the theme in use (See Options › Theme) drops onto a dark card and bounces,
+  then "LYNX" and the version slide in while the audio engine and the workspace load. It lasts about 2 s. The logo is
+  drawn in vector (`ui/FoodGlyphs.h`), so a food theme puts its own fruit - a banana, a kiwi - on the splash, and the
+  default look keeps LYNX's pepper. The theme is read after `themeui::loadSaved()`, so the choice is reflected at once.
 - A short start-up sound is synthesised in code: a whoosh, a landing "pop" timed to the first bounce, and a
   plucked chime.
 - Both can be turned off in Options. They never appear in the command-line modes.

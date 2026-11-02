@@ -2,9 +2,10 @@
 
 #include "core/StartupSound.h"
 #include "engine/PluginHost.h"
+#include "ui/FoodGlyphs.h"
 #include "ui/I18n.h"
-#include "ui/SplashData.h"
 #include "ui/Theme.h"
+#include "ui/ThemeSettings.h"
 
 namespace lynx
 {
@@ -86,7 +87,7 @@ std::shared_ptr<const SampleData> makeStartupSample()
 // --- the splash -----------------------------------------------------------------------------------
 
 SplashScreen::SplashScreen()
-    : pepper (juce::ImageCache::getFromMemory (splashdata::pepperPng, (int) sizeof (splashdata::pepperPng)))
+    : kit (themes::kitFor (themeui::current()))
 {
     setOpaque (false);
     setSize (width, height);
@@ -186,9 +187,9 @@ void SplashScreen::paint (juce::Graphics& g)
     juce::Graphics::ScopedSaveState clip (g);
     g.reduceClipRegion (cardShape);
 
-    // the pepper's resting place, and its drop
-    const auto pepperHeight = 212.0f;
-    const auto pepperWidth = pepperHeight * (float) pepper.getWidth() / (float) juce::jmax (1, pepper.getHeight());
+    // the logo's resting place, and its drop: the food logo of the theme in use, drawn in vector (ui/FoodGlyphs.h), so a
+    // food theme puts its own fruit on the splash - the same mark the About window shows
+    const auto logoSize = 132.0f;
     const auto restX = 168.0f, restBottom = 270.0f;
     const auto fall = 300.0f;
     const auto lift = (float) (1.0 - easeOutBounce (t / dropTime)) * fall;
@@ -213,7 +214,7 @@ void SplashScreen::paint (juce::Graphics& g)
         g.drawEllipse (restX - r, restBottom - r * 0.16f, 2.0f * r, r * 0.32f, 1.5f);
     }
 
-    // shadow: grows and darkens as the pepper comes down
+    // shadow: grows and darkens as the logo comes down
     {
         const auto near = 1.0f - juce::jlimit (0.0f, 1.0f, lift / fall);
         const auto w = 92.0f * (0.35f + 0.65f * near) * (1.0f + 0.15f * impact);
@@ -221,18 +222,20 @@ void SplashScreen::paint (juce::Graphics& g)
         g.fillEllipse (restX - w / 2.0f, restBottom - 7.0f, w, 12.0f);
     }
 
-    // the pepper: fades in, falls, squashes a little on each touch and settles with a slight tilt
-    if (pepper.isValid() && t > 0.0)
+    // the logo: fades in, falls, squashes a little on each touch and settles with a slight tilt
+    if (t > 0.0)
     {
-        const auto angle = juce::degreesToRadians ((float) (-12.0 - 26.0 * (1.0 - easeOutBack (t / 0.95))));
+        const auto angle = juce::degreesToRadians ((float) (-8.0 - 20.0 * (1.0 - easeOutBack (t / 0.95))));
         const auto squashY = 1.0f - 0.10f * impact, squashX = 1.0f + 0.06f * impact;
-        const auto transform = juce::AffineTransform::scale (pepperWidth / (float) pepper.getWidth() * squashX,
-                                                             pepperHeight / (float) pepper.getHeight() * squashY)
-                                   .translated (-pepperWidth * squashX / 2.0f, -pepperHeight * squashY)
+        const auto transform = juce::AffineTransform::translation (-logoSize * 0.5f, -logoSize * 0.5f)
+                                   .scaled (squashX, squashY)
                                    .rotated (angle)
-                                   .translated (restX, restBottom - lift);
+                                   .translated (restX, restBottom - logoSize * 0.5f - lift);
+
+        juce::Graphics::ScopedSaveState state (g);
+        g.addTransform (transform);
         g.setOpacity ((float) clamp01 (t / 0.18));
-        g.drawImageTransformed (pepper, transform, false);
+        food::paintLogo (g, { 0.0f, 0.0f, logoSize, logoSize }, kit);
         g.setOpacity (1.0f);
     }
 

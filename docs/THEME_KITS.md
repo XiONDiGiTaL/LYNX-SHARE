@@ -2,48 +2,91 @@
 
 `core/ThemeKits.h` adds a small, explicit layer above the palette engine in `core/ThemePalette.h`.
 
-A kit is a *seed*, not a token table: an accent, a background and (optionally) a workspace colour. The existing
-engine turns those two colours into all forty-odd tokens the UI draws with - elevations, hairlines, hover and pressed
-shades, tinted selections, note colours and readable text - so a kit is two hex values and cannot drift out of
-relation with the rest of the interface. This is the same idea as Kryvex's token system: name the intent, derive the
-tokens, keep contrast measurable.
+A kit is a *seed*, not a token table: an accent, a background and a workspace, expanded by the existing engine into all
+forty-odd tokens the UI draws with - elevations, hairlines, hover and pressed shades, tinted selections, note colours and
+readable text. A kit is therefore a handful of hex values, and it cannot drift out of relation with the rest of the
+interface. This is the same idea as Kryvex's token system: name the intent, derive the tokens, keep contrast measurable.
 
-The kits that ship are foods, matching the fruit-and-vegetable logos FL Studio and LYNX SHARE both use. They arrive in
-*Options > Theme* behind the built-in looks (LYNX, Ocean, Emerald, Amber, Violet, Graphite), because
-`themes::builtInThemes()` appends `kitThemes()`; nothing else in the theme page had to change.
+The kits that ship are foods, matching the fruit-and-vegetable logos FL Studio and LYNX SHARE both use. Each one is also
+an identity the interface draws, because a name in a dropdown does not say "Banana":
 
-| Kit | Id | Accent | Background |
-| --- | --- | --- | --- |
-| Banana | `banana` | `#F2C21B` | `#17150D` |
-| Eggplant | `eggplant` | `#8F5BD6` | `#141019` |
-| Blueberry | `blueberry` | `#4E6BE8` | `#0F1320` |
-| Lime | `lime` | `#A6D81C` | `#12150E` |
-| Watermelon | `watermelon` | `#FF5C73` | `#101614` |
-| Mango | `mango` | `#FF9E1F` | `#1A1209` |
-| Cherry | `cherry` | `#D92B45` | `#160F11` |
-| Avocado | `avocado` | `#7FB53A` | `#12140F` |
-| Dragonfruit | `dragonfruit` | `#FF4FA3` | `#170F18` |
-| Lychee | `lychee` | `#F2A0B5` | `#161114` |
+| Kit | Id | Caption | Accent | Leaf | Background | Workspace |
+| --- | --- | --- | --- | --- | --- | --- |
+| Cherry | `cherry` | `CHERRY \| RED \| BRIGHT` | `#D92B45` | `#4E7A3A` | `#160F11` | `#0A0708` |
+| Watermelon | `watermelon` | `WATERMELON \| PINK \| JUICY` | `#FF5C73` | `#3F8A4F` | `#101614` | `#070908` |
+| Mango | `mango` | `MANGO \| ORANGE \| TROPICAL` | `#FF9E1F` | `#4F8A38` | `#1A1209` | `#0C0804` |
+| Banana | `banana` | `BANANA \| YELLOW \| SWEET` | `#F2C21B` | `#7FA83A` | `#17150D` | `#0B0A06` |
+| Kiwi | `kiwi` | `KIWI \| GREEN \| TART` | `#63C46B` | `#6E8F3F` | `#101511` | `#070A08` |
+| Lime | `lime` | `LIME \| LIME \| SOUR` | `#A6D81C` | `#5E8C2A` | `#12150E` | `#080A06` |
+| Avocado | `avocado` | `AVOCADO \| OLIVE \| CREAMY` | `#7FB53A` | `#4F7A26` | `#12140F` | `#080907` |
+| Blueberry | `blueberry` | `BLUEBERRY \| BLUE \| BERRY` | `#4E6BE8` | `#5C8A4A` | `#0F1320` | `#080A11` |
+| Eggplant | `eggplant` | `EGGPLANT \| PURPLE \| RICH` | `#8F5BD6` | `#5E8A3A` | `#141019` | `#09070C` |
+| Fig | `fig` | `FIG \| INDIGO \| ANCIENT` | `#6D5AE8` | `#5E8A46` | `#121122` | `#08070F` |
+| Dragonfruit | `dragonfruit` | `DRAGONFRUIT \| VIOLET \| EXOTIC` | `#FF4FA3` | `#4F9A5C` | `#170F18` | `#0A070B` |
+| Lychee | `lychee` | `LYCHEE \| BLUSH \| FLORAL` | `#F2A0B5` | `#5B8C43` | `#161114` | `#0A0709` |
+| Coconut | `coconut` | `COCONUT \| CREAM \| MELLOW` | `#E4C9A0` | `#8A6A45` | `#16110D` | `#0A0705` |
 
-Each background is tinted towards its fruit, and the light accents (Lychee, Banana, Lime) get dark text on the accent
-automatically through `readableTextOn`.
+The order is a hue sweep (red, pink, orange, yellow, green, lime, olive, blue, purple, indigo, violet, blush) that ends
+on the neutral, so the gallery in *Options > Theme* reads like a menu.
+
+Each background is the app's dark gray tinted towards its fruit, and each workspace is a deeper surface of the same
+family - so the fruit reaches the backdrop behind the panels, not only the accent. The leaf (or skin, or rind) is the
+badge's second colour. Light accents (Banana, Kiwi, Lime, Coconut) get dark ink on the accent automatically through
+`readableTextOn`.
+
+## Where the kits appear
+
+- **Options > Theme** opens with a hero strip: the logo of the theme in use, its name, its caption and its three seeds
+  (accent, background, workspace).
+- **The food gallery** under the theme presets draws every kit as the badge the themes were designed around: a dark disc,
+  a ring glowing in the kit's accent, the fruit on it, the name and `HUE | TASTE` under it. Clicking one applies the
+  kit - accent, background, workspace and name - like a preset. The dropdown above still lists the six built-in looks,
+  the thirteen kits and your own `.lynxtheme` presets.
+- **The logo** (`ui/FoodGlyphs.h`) is the same fruit in a rounded square of the theme's accent, in the ink that reads on
+  it. It is the mark in the About window, next to the theme's name and caption. LYNX's own look and hand-made colours
+  (Ocean, Emerald, a custom accent) show the pepper instead, in their own accent: `kitFor(spec)` always returns
+  something to draw.
+
+Everything is drawn with `juce::Path` and primitives from a unit square (0..1, y down), so a mark works at 16 px in the
+hero and at 112 px in the gallery, and picks up the theme's colours live. Nothing is loaded from disk.
 
 ## Adding a kit
 
 One entry in `foodKits()` in `src/core/ThemeKits.cpp`:
 
 ```cpp
-{ "coffee", "Coffee", 0xffb07d48, 0xff14100c },
+{ "coffee", "Coffee", "BROWN", "BITTER", 0xffb07d48, 0xff6d4b2c, 0xff14100c, 0xff0a0705 },
 ```
 
-`findKit("coffee")` then resolves it by id or by name (case-insensitive), so a preset can remember the stable id while
-the menu shows the label.
+`findKit ("coffee")` then resolves it by id or by name (case-insensitive), so a preset can remember the stable id while
+the menu shows the label. The id also picks the badge and the logo mark: an id without a mark draws LYNX's pepper until
+it has one, and `kitFor` keeps every theme drawable.
+
+To give the new id a mark, add a function to `src/ui/FoodGlyphs.cpp` and a branch in `markById` (the fruit shapes are the
+design: keep them in the unit square, and keep `tools/make_theme_kits.py` in step if you want the README picture to show
+it).
 
 ## Guarantees the tests hold
 
 `tests/ThemeKitsTests.inc` checks every kit, not just the one being edited:
 
-* text on panels stays at a contrast ratio of at least 7:1, and text on the accent at least 3:1 (WCAG);
-* `accentHover` is lighter and `accentPressed` darker than the accent, so the interaction states stay ordered;
-* ids and names are unique and ids are not labels;
-* the kits really do reach the theme picker, with LYNX still first (the default look).
+- text on panels stays at a contrast ratio of at least 7:1, and text on the accent at least 3:1 (WCAG);
+- `accentHover` is lighter and `accentPressed` darker than the accent, so the interaction states stay ordered;
+- the accent really is the theme's primary: `selectionFill` and the note colours are derived from it;
+- the workspace is named (not "automatic"), darker than the background, and is what `workspaceColour` returns;
+- ids, names, captions and accents are unique, and every caption is `NAME | HUE | TASTE` in upper case;
+- the leaf is its own colour, never the accent again;
+- `matchKit` finds a kit by its accent and background and nothing else, `kitFor` gives a pepper for anything else;
+- the kits reach the theme picker in gallery order, with LYNX still first (the default look) and Coconut last.
+
+## The picture in the README
+
+`docs/img/theme-kits.svg` is generated, not drawn by hand:
+
+```sh
+python tools/make_theme_kits.py             # rewrites the SVG
+python tools/make_theme_kits.py --png out.png   # a quick preview (gradients flattened)
+```
+
+The script holds the kit table and the same unit-space fruit geometry as `FoodGlyphs.cpp`, so the picture matches what
+the theme page draws.

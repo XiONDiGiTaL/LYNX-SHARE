@@ -289,35 +289,49 @@ Details, format by format: [`docs/FOREIGN_PROJECTS.md`](docs/FOREIGN_PROJECTS.md
 ## Food theme kits
 
 <p align="center">
-  <img src="docs/img/theme-kits.svg" alt="Ten food theme kits: Banana, Eggplant, Blueberry, Lime, Watermelon, Mango, Cherry, Avocado, Dragonfruit and Lychee" width="100%">
-  <br><sub>Ten kits in <em>Options > Theme</em>, after the six built-in looks.</sub>
+  <img src="docs/img/theme-kits.svg" alt="Thirteen food theme kits - Cherry, Watermelon, Mango, Banana, Kiwi, Lime, Avocado, Blueberry, Eggplant, Fig, Dragonfruit, Lychee and Coconut - each drawn as its fruit badge, and the food logo in every theme's colour" width="100%">
+  <br><sub>Thirteen food kits in <em>Options > Theme</em>, after the six built-in looks: the fruit is the badge, the<br>accent and the logo, and the dark gray surfaces are tinted towards it.</sub>
 </p>
 
 A kit is a seed, not a painted skin. Give it an accent and a background and the theme engine derives everything else the
 interface draws with: panel elevations, hairlines, hover and pressed shades, tinted selections, note colours, and text
-that stays readable on both. Two hex values per kit, and nothing about it can drift out of relation with the rest of the
-window - the light accents (Banana, Lime, Lychee) take dark ink on the accent automatically.
+that stays readable on both. The two hex values are the fruit's colour and a dark gray mixed towards it - the light
+accents (Banana, Kiwi, Lime) take dark ink on the accent automatically - and the kit also names its own workspace, a
+deeper surface of the same family, so the fruit reaches the backdrop behind the panels as well.
 
-| Kit | Accent | Background |
-|---|---|---|
-| Banana | `#F2C21B` | `#17150D` |
-| Eggplant | `#8F5BD6` | `#141019` |
-| Blueberry | `#4E6BE8` | `#0F1320` |
-| Lime | `#A6D81C` | `#12150E` |
-| Watermelon | `#FF5C73` | `#101614` |
-| Mango | `#FF9E1F` | `#1A1209` |
-| Cherry | `#D92B45` | `#160F11` |
-| Avocado | `#7FB53A` | `#12140F` |
-| Dragonfruit | `#FF4FA3` | `#170F18` |
-| Lychee | `#F2A0B5` | `#161114` |
+Each kit carries the identity the theme page draws: its fruit, the words of its caption (`KIWI | GREEN | TART`) and the
+colour of its leaf or skin. `Options > Theme` shows them as the badges the themes were designed around - a dark disc with
+a ring glowing in the kit's accent and the fruit on it - and the same fruit goes into LYNX SHARE's logo and the About
+window. Nothing is loaded from disk: the marks are vector paths (`src/ui/FoodGlyphs.cpp`), so they follow the theme and
+stay crisp at every size.
+
+| Kit | Caption | Accent | Background | Workspace |
+|---|---|---|---|---|
+| Cherry | `RED \| BRIGHT` | `#D92B45` | `#160F11` | `#0A0708` |
+| Watermelon | `PINK \| JUICY` | `#FF5C73` | `#101614` | `#070908` |
+| Mango | `ORANGE \| TROPICAL` | `#FF9E1F` | `#1A1209` | `#0C0804` |
+| Banana | `YELLOW \| SWEET` | `#F2C21B` | `#17150D` | `#0B0A06` |
+| Kiwi | `GREEN \| TART` | `#63C46B` | `#101511` | `#070A08` |
+| Lime | `LIME \| SOUR` | `#A6D81C` | `#12150E` | `#080A06` |
+| Avocado | `OLIVE \| CREAMY` | `#7FB53A` | `#12140F` | `#080907` |
+| Blueberry | `BLUE \| BERRY` | `#4E6BE8` | `#0F1320` | `#080A11` |
+| Eggplant | `PURPLE \| RICH` | `#8F5BD6` | `#141019` | `#09070C` |
+| Fig | `INDIGO \| ANCIENT` | `#6D5AE8` | `#121122` | `#08070F` |
+| Dragonfruit | `VIOLET \| EXOTIC` | `#FF4FA3` | `#170F18` | `#0A070B` |
+| Lychee | `BLUSH \| FLORAL` | `#F2A0B5` | `#161114` | `#0A0709` |
+| Coconut | `CREAM \| MELLOW` | `#E4C9A0` | `#16110D` | `#0A0705` |
 
 - **One line to add one.** A kit is an entry in `src/core/ThemeKits.cpp`, and `findKit("coffee")` resolves it by stable
-  id or by its label, so a preset or a layout remembers the kit while the menu shows the name.
+  id or by its label, so a preset or a layout remembers the kit while the menu shows the name. A new id draws LYNX's
+  pepper until it has a mark of its own.
 - **Measured, not eyeballed.** The core tests check every kit, not just the one being edited: at least 7:1 contrast for
-  text on panels and 3:1 on the accent, `accentHover` lighter and `accentPressed` darker than the accent, ids and names
-  unique.
+  text on panels and 3:1 on the accent, `accentHover` lighter and `accentPressed` darker than the accent, a darker
+  workspace than the background, unique ids, names and accents, and a caption for each.
 - **Nothing else moved.** Kits arrive through the same `builtInThemes()` list as the six built-in looks, so the theme
-  page, the accent/background overrides and the colours saved in projects behave exactly as before.
+  page, the accent/background overrides and the colours saved in projects behave exactly as before; the gallery, the
+  badge and the logo are additive.
+- **The picture is generated.** `python tools/make_theme_kits.py` rewrites `docs/img/theme-kits.svg` from the kit table
+  with the same unit-space fruit geometry the app draws (add `--png out.png` for a quick preview).
 
 Details: [`docs/THEME_KITS.md`](docs/THEME_KITS.md).
 
