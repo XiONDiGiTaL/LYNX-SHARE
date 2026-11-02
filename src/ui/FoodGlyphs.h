@@ -4,14 +4,15 @@
 
 #include "core/ThemeKits.h"
 
-// The food themes drawn: every kit has a vector mark (a banana, a kiwi, an eggplant...), shown on the badge the theme
-// page presents - a dark disc with a glowing ring in the kit's accent, as the food themes were designed - and inside
-// LYNX SHARE's logo, a rounded square in the kit's colours. Nothing is loaded from disk: the marks are paths, so they
-// take the theme's accent and leaf colours and stay crisp at every size. A theme that is not a kit shows the pepper,
-// LYNX's own fruit.
+// The food themes drawn: every kit has a mark (a banana, a kiwi, an eggplant...), shown on the badge the theme page
+// presents - a dark disc with a glowing ring in the kit's accent, as the food themes were designed - and inside LYNX
+// SHARE's logo, a rounded square in the kit's colours. The mark is the art from tools/reference/theme-fruits.png,
+// embedded as a PNG (ui/FoodMarkData.h) so it is the design and not an approximation of it; kits without art fall back
+// to the vector marks in FoodGlyphs.cpp. A theme that is not a kit shows the pepper, LYNX's own fruit.
 namespace lynx::food
 {
-// The kit's fruit in `ink` (its body) and `leaf` (leaves, stems, skins), fitted into `area` (centred, square).
+// The kit's fruit, fitted into `area` (centred, square): the embedded art when the kit has some, else the vector mark
+// drawn in `ink` (its body) and `leaf` (leaves, stems, skins).
 void paintMark (juce::Graphics&, juce::Rectangle<float> area, const themes::Kit&, juce::Colour ink, juce::Colour leaf);
 
 // The kit's badge: a disc in the kit's background, a ring glowing in its accent, the fruit on it. `selected` brightens

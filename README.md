@@ -9,7 +9,7 @@ Channel Rack, Piano Roll, Playlist and Mixer in C++20 + JUCE 8, built to run wel
 Windows, macOS and Linux.</p>
 
 <p align="center">
-  <a href="https://github.com/Ka1-S/LYNX-SHARE/releases"><img src="https://img.shields.io/badge/Download-0.1.21%20alpha-d9534f?style=for-the-badge" alt="Download LYNX SHARE"></a>
+  <a href="https://github.com/XiONDiGiTaL/LYNX-SHARE/releases"><img src="https://img.shields.io/badge/Download-0.1.22%20alpha-d9534f?style=for-the-badge" alt="Download LYNX SHARE"></a>
   <a href="https://github.com/Ka1-S/LYNX-SHARE/releases"><img src="https://img.shields.io/github/downloads/Ka1-S/LYNX-SHARE/total?style=for-the-badge&label=downloads&color=24292f" alt="Total downloads"></a>
   <a href="https://github.com/Ka1-S/LYNX-SHARE/stargazers"><img src="https://img.shields.io/github/stars/Ka1-S/LYNX-SHARE?style=for-the-badge&color=24292f" alt="GitHub stars"></a>
 </p>
@@ -43,6 +43,27 @@ Windows, macOS and Linux.</p>
   <img src="docs/img/workspace.png" alt="The LYNX SHARE workspace: browser, playlist, piano roll, channel rack and mixer" width="100%">
   <br><sub>LYNX SHARE's own demo project (<code>LYNX.exe --showcase</code>) in the 0.1.19 workspace: browser, Piano Roll, Channel Rack and Mixer.</sub>
 </p>
+
+---
+
+## This fork
+
+[XiONDiGiTaL/LYNX-SHARE](https://github.com/XiONDiGiTaL/LYNX-SHARE) builds on upstream
+[Ka1-S/LYNX-SHARE](https://github.com/Ka1-S/LYNX-SHARE) and adds:
+
+- **Food theme kits** — thirteen fruit-and-veg themes (Tangerine, Banana, Kiwi, Blueberry, Eggplant, Fig, Dragonfruit,
+  Coconut and the rest) that tint the accent, the panels and the workspace, and that the interface draws as badges, as the
+  app logo and as the object the start-up splash drops. The nine fruits on the reference sheet
+  (`tools/reference/theme-fruits.png`) are cut out of it and embedded (`docs/img/marks/`), so the badge in *Options >
+  Theme* is the artwork itself. See [Food theme kits](#food-theme-kits).
+- **Cubase / Nuendo / Cakewalk import** — `.cpr`, `.npr` and `.cwp` projects open in LYNX SHARE, beside FL Studio's
+  `.flp`. See [Opens Cubase, Nuendo and Cakewalk projects](#opens-cubase-nuendo-and-cakewalk-projects).
+- **A Visual Studio build** — the CMake project builds with MSVC as well as GCC/Clang, including the exact FL dsp kernels
+  ([Windows with Visual Studio](#windows-with-visual-studio)).
+
+In progress: matching artwork for the five kits that are not on the reference sheet (Cherry, Watermelon, Lime, Avocado,
+Lychee — they still draw with the vector marks), and the reporting edge cases of the Cubase/Cakewalk reader. The full
+list of what is measured and what is still open per engine is in [docs/STATUS.md](docs/STATUS.md).
 
 ---
 
@@ -289,7 +310,7 @@ Details, format by format: [`docs/FOREIGN_PROJECTS.md`](docs/FOREIGN_PROJECTS.md
 ## Food theme kits
 
 <p align="center">
-  <img src="docs/img/theme-kits.svg" alt="Thirteen food theme kits - Cherry, Watermelon, Mango, Banana, Kiwi, Lime, Avocado, Blueberry, Eggplant, Fig, Dragonfruit, Lychee and Coconut - each drawn as its fruit badge, and the food logo in every theme's colour" width="100%">
+  <img src="docs/img/theme-kits.svg" alt="Thirteen food theme kits - Cherry, Watermelon, Tangerine, Banana, Kiwi, Lime, Avocado, Blueberry, Eggplant, Fig, Dragonfruit, Lychee and Coconut - each drawn as its fruit badge, and the food logo in every theme's colour" width="100%">
   <br><sub>Thirteen food kits in <em>Options > Theme</em>, after the six built-in looks: the fruit is the badge, the<br>accent and the logo, and the dark gray surfaces are tinted towards it.</sub>
 </p>
 
@@ -303,14 +324,18 @@ Each kit carries the identity the theme page draws: its fruit, the words of its 
 colour of its leaf or skin. `Options > Theme` shows them as the badges the themes were designed around - a dark disc with
 a ring glowing in the kit's accent and the fruit on it - and the same fruit sits on LYNX SHARE's logo tile, a rounded
 square of the kit's dark surface edged and haloed in its accent, in the About window and on the start-up splash.
-Nothing is loaded from disk: the marks are vector paths (`src/ui/FoodGlyphs.cpp`), so they follow the theme and stay
-crisp at every size.
+
+The fruit is the art from `tools/reference/theme-fruits.png`, cut out of the reference sheet by
+`python tools/extract_fruit_marks.py` (the disc's grey is keyed off, the fruit keeps its own shading) and embedded in the
+binary as 224 px PNGs (`src/ui/FoodMarkData.h`), so the badge shows the design itself rather than a redrawing of it and
+nothing is read from disk at run time. Cherry, Watermelon, Lime, Avocado and Lychee have no art on the sheet yet and
+still draw the vector marks in `src/ui/FoodGlyphs.cpp`; LYNX's own look shows the pepper from the same sheet.
 
 | Kit | Caption | Accent | Background | Workspace |
 |---|---|---|---|---|
 | Cherry | `RED \| BRIGHT` | `#D92B45` | `#160F11` | `#0A0708` |
 | Watermelon | `PINK \| JUICY` | `#FF5C73` | `#101614` | `#070908` |
-| Mango | `ORANGE \| TROPICAL` | `#FF9E1F` | `#1A1209` | `#0C0804` |
+| Tangerine | `ORANGE \| ZEST` | `#FF9E1F` | `#1A1209` | `#0C0804` |
 | Banana | `YELLOW \| SWEET` | `#F2C21B` | `#17150D` | `#0B0A06` |
 | Kiwi | `GREEN \| TART` | `#63C46B` | `#101511` | `#070A08` |
 | Lime | `LIME \| SOUR` | `#A6D81C` | `#12150E` | `#080A06` |
@@ -324,17 +349,19 @@ crisp at every size.
 
 - **One line to add one.** A kit is an entry in `src/core/ThemeKits.cpp`, and `findKit("coffee")` resolves it by stable
   id or by its label, so a preset or a layout remembers the kit while the menu shows the name. A new id draws LYNX's
-  pepper until it has a mark of its own.
+  pepper until it has a mark of its own - art in `docs/img/marks/<id>.png` (with the id added to the sheet table in
+  `tools/extract_fruit_marks.py` and the header regenerated), or a vector shape in `src/ui/FoodGlyphs.cpp`.
 - **Measured, not eyeballed.** The core tests check every kit, not just the one being edited: at least 7:1 contrast for
   text on panels and 3:1 on the accent, `accentHover` lighter and `accentPressed` darker than the accent, a darker
   workspace than the background, unique ids, names and accents, and a caption for each.
 - **Nothing else moved.** Kits arrive through the same `builtInThemes()` list as the six built-in looks, so the theme
   page, the accent/background overrides and the colours saved in projects behave exactly as before; the gallery, the
   badge and the logo are additive.
-- **The pictures are the app.** The screenshots below are `LYNX.exe --snapshot` renders with `LYNX_SNAPSHOT_THEME`
-  pointed at a `.lynxtheme` (the song is `LYNX.exe --showcase song.lynx`), so any theme can be re-rendered in one
-  command. The badge sheet above is drawn instead: `python tools/make_theme_kits.py` rewrites `docs/img/theme-kits.svg`
-  from the kit table with the same unit-space fruit geometry the app draws (add `--png out.png` for a quick preview).
+- **The pictures are the app.** The theme page, the splash and the workspace below are `LYNX.exe --snapshot` renders
+  with `LYNX_SNAPSHOT_THEME` pointed at a `.lynxtheme` (the song is `LYNX.exe --showcase song.lynx`), so any theme can be
+  re-rendered in one command. The badge sheet above is generated instead: `python tools/make_theme_kits.py` rewrites
+  `docs/img/theme-kits.svg` from the kit table, embedding the same mark PNGs the app draws (vector shapes only for the
+  kits without art), so the sheet cannot drift from the badges (add `--png out.png` for a quick preview).
 
 ### In the app
 
@@ -358,7 +385,7 @@ and the meters, while the surfaces under the panels stay the kit's dark gray, ti
 
 <table>
 <tr>
-<td width="33%" valign="top"><img src="docs/img/theme-mango.png" alt="The LYNX SHARE workspace in the Mango theme"><br><sub><strong>Mango</strong> | ORANGE | TROPICAL</sub></td>
+<td width="33%" valign="top"><img src="docs/img/theme-tangerine.png" alt="The LYNX SHARE workspace in the Tangerine theme"><br><sub><strong>Tangerine</strong> | ORANGE | ZEST</sub></td>
 <td width="33%" valign="top"><img src="docs/img/theme-banana.png" alt="The LYNX SHARE workspace in the Banana theme"><br><sub><strong>Banana</strong> | YELLOW | SWEET</sub></td>
 <td width="33%" valign="top"><img src="docs/img/theme-kiwi.png" alt="The LYNX SHARE workspace in the Kiwi theme"><br><sub><strong>Kiwi</strong> | GREEN | TART</sub></td>
 </tr>
@@ -373,8 +400,8 @@ Details: [`docs/THEME_KITS.md`](docs/THEME_KITS.md).
 
 ## Download
 
-Every release on the [latest release page](https://github.com/Ka1-S/LYNX-SHARE/releases) has builds for all three
-platforms (`<v>` is the version, e.g. `0.1.10-alpha`):
+Every release on the [latest release page](https://github.com/XiONDiGiTaL/LYNX-SHARE/releases) has builds for all three
+platforms (`<v>` is the version, e.g. `0.1.22-alpha`):
 
 | OS | Download | Notes |
 |---|---|---|

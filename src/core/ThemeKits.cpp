@@ -32,7 +32,7 @@ const std::vector<Kit>& foodKits()
     static const std::vector<Kit> all {
         { "cherry", "Cherry", "RED", "BRIGHT", 0xffd92b45, 0xff4e7a3a, 0xff160f11, 0xff0a0708 },
         { "watermelon", "Watermelon", "PINK", "JUICY", 0xffff5c73, 0xff3f8a4f, 0xff101614, 0xff070908 },
-        { "mango", "Mango", "ORANGE", "TROPICAL", 0xffff9e1f, 0xff4f8a38, 0xff1a1209, 0xff0c0804 },
+        { "tangerine", "Tangerine", "ORANGE", "ZEST", 0xffff9e1f, 0xff4f8a38, 0xff1a1209, 0xff0c0804 },
         { "banana", "Banana", "YELLOW", "SWEET", 0xfff2c21b, 0xff7fa83a, 0xff17150d, 0xff0b0a06 },
         { "kiwi", "Kiwi", "GREEN", "TART", 0xff63c46b, 0xff6e8f3f, 0xff101511, 0xff070a08 },
         { "lime", "Lime", "LIME", "SOUR", 0xffa6d81c, 0xff5e8c2a, 0xff12150e, 0xff080a06 },

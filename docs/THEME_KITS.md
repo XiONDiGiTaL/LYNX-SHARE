@@ -14,7 +14,7 @@ an identity the interface draws, because a name in a dropdown does not say "Bana
 | --- | --- | --- | --- | --- | --- | --- |
 | Cherry | `cherry` | `CHERRY \| RED \| BRIGHT` | `#D92B45` | `#4E7A3A` | `#160F11` | `#0A0708` |
 | Watermelon | `watermelon` | `WATERMELON \| PINK \| JUICY` | `#FF5C73` | `#3F8A4F` | `#101614` | `#070908` |
-| Mango | `mango` | `MANGO \| ORANGE \| TROPICAL` | `#FF9E1F` | `#4F8A38` | `#1A1209` | `#0C0804` |
+| Tangerine | `tangerine` | `TANGERINE \| ORANGE \| ZEST` | `#FF9E1F` | `#4F8A38` | `#1A1209` | `#0C0804` |
 | Banana | `banana` | `BANANA \| YELLOW \| SWEET` | `#F2C21B` | `#7FA83A` | `#17150D` | `#0B0A06` |
 | Kiwi | `kiwi` | `KIWI \| GREEN \| TART` | `#63C46B` | `#6E8F3F` | `#101511` | `#070A08` |
 | Lime | `lime` | `LIME \| LIME \| SOUR` | `#A6D81C` | `#5E8C2A` | `#12150E` | `#080A06` |
@@ -48,8 +48,28 @@ badge's second colour. Light accents (Banana, Kiwi, Lime, Coconut) get dark ink 
   and caption, and the object the start-up splash drops. LYNX's own look and hand-made colours (Ocean, Emerald, a custom
   accent) show the pepper instead, in their own accent: `kitFor(spec)` always returns something to draw.
 
-Everything is drawn with `juce::Path` and primitives from a unit square (0..1, y down), so a mark works at 16 px in the
-hero and at 112 px in the gallery, and picks up the theme's colours live. Nothing is loaded from disk.
+## The art
+
+The fruit is the art on the reference sheet, `tools/reference/theme-fruits.png` - a 3 x 3 grid of the nine fruits, each on
+a disc with a glowing ring and its `NAME | HUE | TASTE` caption. The badge only supplies that disc and ring, so
+`tools/extract_fruit_marks.py` cuts the fruit out of it: it keys the disc's neutral grey and its soft shadow off the
+pixels, keeps the fruit's own silhouette (closing the gaps and filling what it encloses, so the dark shading survives),
+feathers the edge and writes one transparent PNG per id - `docs/img/marks/<id>.png`, 224 px, which is the size the
+badges are drawn at on a retina screen. The same script regenerates `src/ui/FoodMarkData.h`, the byte arrays the binary
+embeds, so the app carries the design and reads nothing from disk.
+
+Cherry, Watermelon, Lime, Avocado and Lychee are not on the sheet: they still draw with `juce::Path` from a unit square
+(0..1, y down) in `src/ui/FoodGlyphs.cpp`, shaded as volumes (a light from the upper left, a gloss, a cut face where one
+belongs). A missing PNG is not an error - the vector mark of the same id is the fallback - and an id with neither draws
+LYNX's pepper.
+
+The art is used as drawn: the badge's ring glows in the kit's accent and the disc is the kit's background, but the
+fruit itself is the sheet's, shading and all - the light from the upper left, the glosses, the cut faces. The vector
+fallback follows the same rules for the fruits that have no art: each is a volume (`solid`: light high on the left, the
+body colour through the middle, the far edge sinking into shadow) with a gloss where the light lands, a cut face with
+pith and seeds where one belongs, the stone for the avocado, the three eyes and the white meat for the coconut. Those
+parts are placed from the kit's colours - the accent is the fruit, the leaf is the stalk, the skin and the calyx - so a
+hand-made theme still draws its own pepper in its own accent.
 
 ## Adding a kit
 
@@ -63,9 +83,10 @@ One entry in `foodKits()` in `src/core/ThemeKits.cpp`:
 the menu shows the label. The id also picks the badge and the logo mark: an id without a mark draws LYNX's pepper until
 it has one, and `kitFor` keeps every theme drawable.
 
-To give the new id a mark, add a function to `src/ui/FoodGlyphs.cpp` and a branch in `markById` (the fruit shapes are the
-design: keep them in the unit square, and keep `tools/make_theme_kits.py` in step if you want the README picture to show
-it).
+To give the new id a mark, either add its badge to the sheet table in `tools/extract_fruit_marks.py` and run it (it
+writes `docs/img/marks/<id>.png` and the header), or add a function to `src/ui/FoodGlyphs.cpp` and a branch in
+`markById` (the fruit shapes are the design: keep them in the unit square). `tools/make_theme_kits.py` picks up either,
+as it embeds the PNG when one exists and calls the vector shape otherwise.
 
 ## Guarantees the tests hold
 
@@ -89,5 +110,7 @@ python tools/make_theme_kits.py             # rewrites the SVG
 python tools/make_theme_kits.py --png out.png   # a quick preview (gradients flattened)
 ```
 
-The script holds the kit table and the same unit-space fruit geometry as `FoodGlyphs.cpp`, so the picture matches what
-the theme page draws.
+The script holds the kit table and embeds the same mark PNGs `FoodMarkData.h` carries, so the sheet cannot drift from
+the badges; for the kits without art it calls the same unit-space vector geometry as `FoodGlyphs.cpp`. Re-run
+`tools/extract_fruit_marks.py` first whenever the art changes, then this script, so the header, the SVG and the theme
+page stay in step.

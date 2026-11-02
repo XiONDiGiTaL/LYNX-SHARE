@@ -34,8 +34,9 @@ struct Kit
     bool operator== (const Kit&) const = default;
 };
 
-// The food kits, in menu order (a hue sweep, red to violet, then the neutrals): Cherry, Watermelon, Mango, Banana,
-// Kiwi, Lime, Avocado, Blueberry, Eggplant, Fig, Dragonfruit, Lychee, Coconut. Accents are the fruit's own colour;
+// The food kits, in menu order (a hue sweep, red to violet, then the neutrals): Cherry, Watermelon, Tangerine,
+// Banana, Kiwi, Lime, Avocado, Blueberry, Eggplant, Fig, Dragonfruit, Lychee, Coconut. Accents are the fruit's own
+// colour;
 // backgrounds are the dark grays tinted towards it, and every workspace is a deeper surface of the same family.
 const std::vector<Kit>& foodKits();
 
