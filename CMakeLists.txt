@@ -14,6 +14,18 @@ if(NOT MSVC)
     add_compile_options(-ffp-contract=off)
 endif()
 
+if(MSVC)
+    # windows.h defines min/max as macros (breaking std::min/max and numeric_limits::max()) and rpcndr.h defines `small`
+    # as char (breaking theme::type::small); MinGW hides both through its own headers, MSVC does not. M_PI and friends sit
+    # behind _USE_MATH_DEFINES in MSVC's <cmath>.
+    add_compile_definitions(NOMINMAX WIN32_LEAN_AND_MEAN _USE_MATH_DEFINES)
+    # tests.cpp and the ported FL engines are large single translation units; MSVC's 65535-section limit is low
+    add_compile_options($<$<COMPILE_LANGUAGE:CXX>:/bigobj>)
+    # MSVC reserves 1 MB of stack, where MinGW and the Unix builds give the main thread 8 MB: the workspace's layout and
+    # the core tests run out of stack at 1 MB (STATUS_STACK_OVERFLOW), so ask for the same 8 MB the other platforms have
+    add_link_options(/STACK:8388608)
+endif()
+
 # FL Slayer's exact engine (x87 arithmetic under its own control word): with GCC 15 at -O1 and above, inlining in this
 # file breaks it (some presets silent or NaN against the DLL goldens; Clang and GCC -O0 / -fno-inline are exact; root
 # cause not isolated, REA round 117). Linux GCC builds compile it without inlining (Slayer about 1.7x slower there).

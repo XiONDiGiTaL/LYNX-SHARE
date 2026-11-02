@@ -482,12 +482,21 @@ differences (see `cmake/mingw/` and `src/platform/MingwFixes.cpp`).
 
 ### Windows with Visual Studio
 
-Requires Visual Studio 2022 Build Tools ("Desktop development with C++"), CMake ≥ 3.22 and Git.
+Requires Visual Studio 2022 (or newer) Build Tools with "Desktop development with C++" and Git; CMake ships inside
+them (`Common7/IDE/CommonExtensions/Microsoft/CMake`) if `cmake` is not on the PATH.
 
 ```
 cmake -B build -G "Visual Studio 17 2022" -A x64
 cmake --build build --config Release
 ```
+
+The app builds with MSVC too: the exact engines' GNU vector types and inline `cpuid` have MSVC equivalents
+(`src/core/Harmor.cpp`, `Ogun.cpp`, `FruityShapers.cpp`, `IldspMath.h`, `HardcoreFx.cpp`), and CMake asks for the 8 MB
+stack the workspace's layout needs, since MSVC reserves 1 MB by default. One difference is worth knowing: MSVC's
+`long double` is 64-bit where GCC's is 80-bit, and its libm rounds some functions differently, so the checks that
+compare engine output to the DLL goldens report small differences for the x87-based engines (Fruity Shapers, Fruity
+Delay, Granulizer, Three Osc, Flangus) and a few others; the app itself is unaffected, and the Zig/MinGW build stays
+the reference for those numbers.
 
 ### Linux
 
@@ -519,6 +528,18 @@ cmake --build build
 ```
 ./scripts/build-local.sh ["folder with .flp files"]
 ```
+
+On Windows with Visual Studio the same tests come from the CMake build:
+
+```
+cmake --build build --config Release --target lynx_tests
+build\Release\lynx_tests.exe
+```
+
+Known issue in that build: the MSVC test binary stops part-way through with `0xC0000409`, MSVC's `/GS` stack check,
+and AddressSanitizer does not see the write. The same tests pass when run on their own (harmor, ogun, hardcore, the
+`rea167j` group), so it is a latent overrun the GCC builds do not detect rather than an engine result; the app itself
+is unaffected and the Zig/MinGW build remains the reference for the suite.
 
 More than a million checks, including parsing the 165 `.flp` projects that ship with FL Studio 2026 when that folder is given. It also builds `build-local/flpdump` (dumps a `.flp`) and `build-local/renderwav`.
 

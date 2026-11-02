@@ -3692,13 +3692,35 @@ std::shared_ptr<Patch> buildPatch (const StateData& S, double fs, double bpm, co
 // (Harmor's glide coefficient can differ per partial), into the 4-lane sum of the sample. The same IEEE operations in
 // the same order whatever the instruction set, so the AVX build gives bit-identical results.
 
-#if defined(__GNUC__)
+#if defined(_MSC_VER)
+#define HARMOR_INLINE __forceinline
+#elif defined(__GNUC__)
 #define HARMOR_INLINE inline __attribute__ ((always_inline))
 #else
 #define HARMOR_INLINE inline
 #endif
 
+#if defined(_MSC_VER)
+// MSVC has no GNU vector types, and no per-function target attribute to compile this kernel twice (baseline and AVX), so
+// the four lanes are a plain struct: the same doubles, the same operations in the same order (the lanes of a GNU vector
+// are separate doubles too, which is what keeps the build bit-identical to the model). The AVX dispatch below stays out
+// on MSVC and the baseline copy runs; the compiler still packs the lanes when it can.
+struct HarmorV4
+{
+    double l[4];
+
+    double& operator[] (int i) noexcept { return l[i]; }
+    double operator[] (int i) const noexcept { return l[i]; }
+};
+
+inline HarmorV4 operator+ (const HarmorV4& a, const HarmorV4& b) noexcept { return { a.l[0] + b.l[0], a.l[1] + b.l[1], a.l[2] + b.l[2], a.l[3] + b.l[3] }; }
+inline HarmorV4 operator- (const HarmorV4& a, const HarmorV4& b) noexcept { return { a.l[0] - b.l[0], a.l[1] - b.l[1], a.l[2] - b.l[2], a.l[3] - b.l[3] }; }
+inline HarmorV4 operator* (const HarmorV4& a, const HarmorV4& b) noexcept { return { a.l[0] * b.l[0], a.l[1] * b.l[1], a.l[2] * b.l[2], a.l[3] * b.l[3] }; }
+inline HarmorV4 operator* (const HarmorV4& a, double k) noexcept { return { a.l[0] * k, a.l[1] * k, a.l[2] * k, a.l[3] * k }; }
+inline HarmorV4& operator+= (HarmorV4& a, const HarmorV4& b) noexcept { for (int i = 0; i < 4; ++i) a.l[i] += b.l[i]; return a; }
+#else
 typedef double HarmorV4 __attribute__ ((vector_size (32)));
+#endif
 
 // G vectors of 4 partials from partial g on: sines x (recurrence x ← c·x − y), glide term e = (a − T)·k^j (e ← e·k),
 // per-sample sums of (T + e)·x into acc[4·j … 4·j + 3]
