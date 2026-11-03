@@ -4146,7 +4146,7 @@ void MainComponent::chooseFileToOpen()
 void MainComponent::chooseFileToOpenNow()
 {
     fileChooser = std::make_unique<juce::FileChooser> (tr ("Open project"), currentFile.getParentDirectory(),
-                                                       juce::String ("*") + ProjectFile::extension + ";*.dawproj;*.flp;*.zip;*.lynxpack;*.mid;*.midi;*.cpr;*.npr;*.cwp;*.cwb;*.cwz;*.wrk");
+                                                       juce::String ("*") + ProjectFile::extension + ";*.dawproject;*.dawproj;*.flp;*.zip;*.lynxpack;*.mid;*.midi;*.cpr;*.npr;*.cwp;*.cwb;*.cwz;*.wrk");
 
     fileChooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
                               [this] (const juce::FileChooser& chooser) {
@@ -4228,6 +4228,12 @@ void MainComponent::openFile (const juce::File& file)
         return;
     }
 
+    if (file.hasFileExtension ("dawproject;dawproj"))
+    {
+        importForeignProject (file);
+        return;
+    }
+
     if (file.hasFileExtension ("cpr;npr;cwp;cwb;cwz;wrk"))
     {
         importForeignProject (file);
@@ -4248,18 +4254,35 @@ void MainComponent::importForeignProject (const juce::File& file)
         return;
     }
 
-    if (! report.hasNotes())
+    if (! report.hasImportableContent())
     {
         juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon, tr ("Could not open"),
                                                 juce::String::fromUTF8 (report.summary().c_str()));
         return;
     }
 
+    // A DAWproject keeps its audio inside the ZIP: unpack it into the same folder project packages use, so the
+    // channels' sample paths stay valid after the import.
+    juce::File mediaDirectory;
+    if (report.format == foreign::Format::dawproject)
+    {
+        auto root = ProjectPackage::defaultExtractRoot();
+        root.createDirectory();
+        mediaDirectory = root.getNonexistentChildFile (juce::File::createLegalFileName (file.getFileNameWithoutExtension()), {}, false);
+        if (! mediaDirectory.createDirectory())
+        {
+            juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon, tr ("Could not open"),
+                                                    tr ("Could not create the folder {0}", { mediaDirectory.getFullPathName() }));
+            return;
+        }
+    }
+
     Song song;
     midiimport::Options options;
     options.perTrack = true;
     std::string importError;
-    if (! foreign::importInto (song, report, options, file.getFileNameWithoutExtension().toStdString(), importError))
+    if (! foreign::importInto (song, report, options, file.getFileNameWithoutExtension().toStdString(),
+                               mediaDirectory.getFullPathName().toStdString(), importError))
     {
         juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon, tr ("Could not open"),
                                                 juce::String::fromUTF8 (importError.c_str()));
@@ -4277,9 +4300,22 @@ void MainComponent::importForeignProject (const juce::File& file)
     playlist.showSongAfterOpen();
 
     // what the reader recovered and what it could not (audio clips, plugin tokens, undecoded event streams)
-    if (! report.findings.empty())
+    if (! report.findings.empty() || report.format == foreign::Format::dawproject)
         juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::InfoIcon, tr ("Imported"),
                                                 juce::String::fromUTF8 (report.summary().c_str()));
+}
+
+void MainComponent::importDawProject()
+{
+    const auto folder = currentFile == juce::File() ? juce::File::getSpecialLocation (juce::File::userDocumentsDirectory)
+                                                    : currentFile.getParentDirectory();
+    fileChooser = std::make_unique<juce::FileChooser> (tr ("Import DAWproject"), folder, "*.dawproject;*.dawproj");
+    fileChooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
+                              [this] (const juce::FileChooser& chooser) {
+                                  const auto file = chooser.getResult();
+                                  if (file.existsAsFile())
+                                      importForeignProject (file);
+                              });
 }
 
 void MainComponent::importFlp (const juce::File& file)
@@ -4933,6 +4969,7 @@ juce::PopupMenu MainComponent::getMenuForIndex (int barIndex, const juce::String
             // FL's File › Import (ImportMenu › ImportMIDIMenu → FileImportMIDIFileAction, REA round 143)
             juce::PopupMenu imports;
             imports.addItem (tr ("MIDI file..."), [this] { importMidiFile(); });
+            imports.addItem (tr ("DAWproject (Bitwig / Studio One / Cubase 14)..."), [this] { importDawProject(); });
             menu.addSubMenu (tr ("Import"), imports);
         }
         {

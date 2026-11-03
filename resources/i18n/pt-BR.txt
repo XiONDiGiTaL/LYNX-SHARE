@@ -3665,6 +3665,8 @@ countries: br
 "OGG file..." = "Arquivo OGG..."
 "FLAC file..." = "Arquivo FLAC..."
 "MIDI file..." = "Arquivo MIDI..."
+"DAWproject (Bitwig / Studio One / Cubase 14)..." = "DAWproject (Bitwig / Studio One / Cubase 14)..."
+"Import DAWproject" = "Importar DAWproject"
 "Last exported format(s)..." = "Último(s) formato(s) exportado(s)..."
 "Project with samples (.zip)..." = "Projeto com samples (.zip)..."
 "Smart disable" = "Desativação inteligente"

@@ -215,6 +215,7 @@ const char* formatName (Format format) noexcept
         case Format::cubase: return "Cubase";
         case Format::cakewalk: return "Cakewalk";
         case Format::cakewalkWrk: return "Cakewalk (.wrk)";
+        case Format::dawproject: return "DAWproject";
         case Format::midi: return "MIDI";
         case Format::unknown: break;
     }
@@ -223,7 +224,7 @@ const char* formatName (Format format) noexcept
 
 const char* openFilter() noexcept
 {
-    return "cpr;npr;cwp;cwb;cwz;wrk;mid;midi";
+    return "cpr;npr;cwp;cwb;cwz;wrk;dawproject;mid;midi";
 }
 
 bool isSupportedExtension (const std::string& extension) noexcept
@@ -232,7 +233,7 @@ bool isSupportedExtension (const std::string& extension) noexcept
     for (auto c : extension)
         if (c != '.' && c != '*')
             ext += (char) std::tolower ((unsigned char) c);
-    for (const auto* candidate : { "cpr", "npr", "cwp", "cwb", "cwz", "wrk", "mid", "midi" })
+    for (const auto* candidate : { "cpr", "npr", "cwp", "cwb", "cwz", "wrk", "dawproject", "mid", "midi" })
         if (ext == candidate)
             return true;
     return false;
@@ -245,6 +246,13 @@ Format detect (const std::uint8_t* data, std::size_t size, const std::string& ex
         if (c != '.' && c != '*')
             ext += (char) std::tolower ((unsigned char) c);
 
+    if (size >= 4 && std::memcmp (data, "PK\x03\x04", 4) == 0)
+    {
+        // A DAWproject is a ZIP; the extension is the reliable discriminator, with project.xml as the fallback for a
+        // file saved without one.
+        if (ext == "dawproject" || findBytes (data, std::min<std::size_t> (size, 4096), "project.xml", 11) != npos)
+            return Format::dawproject;
+    }
     if (size >= 14 && std::memcmp (data, "MThd", 4) == 0)
         return Format::midi;
     constexpr std::uint8_t ole2[8] { 0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1 };
@@ -261,6 +269,8 @@ Format detect (const std::uint8_t* data, std::size_t size, const std::string& ex
         return Format::cubase;
     if (ext == "cwp" || ext == "cwb" || ext == "cwz")
         return Format::cakewalk;
+    if (ext == "dawproject")
+        return Format::dawproject;
     if (ext == "mid" || ext == "midi")
         return Format::midi;
     return Format::unknown;
@@ -268,6 +278,8 @@ Format detect (const std::uint8_t* data, std::size_t size, const std::string& ex
 
 int Report::noteCount() const noexcept
 {
+    if (format == Format::dawproject)
+        return dawproject.noteCount;
     int count = 0;
     for (const auto& e : midi.events)
         if ((e.status & 0xf0) == 0x90 && e.data2 > 0)
@@ -283,6 +295,9 @@ std::string Report::summary() const
         out << " " << version;
     out << ": " << tracks.size() << (tracks.size() == 1 ? " track" : " tracks") << ", " << noteCount()
         << (noteCount() == 1 ? " note" : " notes");
+    if (format == Format::dawproject && dawproject.clipCount > 0)
+        out << ", " << dawproject.clipCount << (dawproject.clipCount == 1 ? " clip" : " clips") << " ("
+            << dawproject.audioCount << " audio)";
     for (const auto& f : findings)
         out << "\n- " << f;
     return out.str();
@@ -599,6 +614,31 @@ bool read (const std::uint8_t* data, std::size_t size, const std::string& extens
         case Format::cubase: return readCubase (data, size, out, error);
         case Format::cakewalk: return readCakewalk (data, size, out, error);
         case Format::cakewalkWrk: return readCakewalkWrk (data, size, out, error);
+        case Format::dawproject:
+        {
+            out = {};
+            out.format = Format::dawproject;
+            std::string projectError;
+            if (! dawproject::read (data, size, out.dawproject, projectError))
+            {
+                error = "DAWproject: " + projectError;
+                return false;
+            }
+            out.application = out.dawproject.application;
+            out.version = out.dawproject.version;
+            out.findings = out.dawproject.findings;
+            for (std::size_t i = 0; i < out.dawproject.tracks.size(); ++i)
+            {
+                const auto& source = out.dawproject.tracks[i];
+                Track track;
+                track.name = source.name.empty() ? "Track " + std::to_string (i + 1) : source.name;
+                for (const auto& clip : source.clips)
+                    if (clip.kind == dawproject::ClipKind::notes)
+                        track.notes += (int) clip.notes.size();
+                out.tracks.push_back (std::move (track));
+            }
+            return true;
+        }
         case Format::midi:
         {
             out = {};
@@ -616,7 +656,7 @@ bool read (const std::uint8_t* data, std::size_t size, const std::string& extens
         case Format::unknown: break;
     }
 
-    error = "not a project this reader knows (Cubase .cpr/.npr, Cakewalk .cwp/.cwb/.wrk, MIDI)";
+    error = "not a project this reader knows (Cubase .cpr/.npr, Cakewalk .cwp/.cwb/.wrk, DAWproject, MIDI)";
     return false;
 }
 
@@ -637,11 +677,27 @@ bool readFile (const std::string& path, Report& out, std::string& error)
     std::string extension;
     if (const auto dot = path.find_last_of ('.'); dot != std::string::npos)
         extension = path.substr (dot + 1);
-    return read (bytes.data(), bytes.size(), extension, out, error);
+    if (! read (bytes.data(), bytes.size(), extension, out, error))
+        return false;
+    if (out.format == Format::dawproject)
+        out.dawproject.sourcePath = path;
+    return true;
 }
 
-bool importInto (Song& song, const Report& report, const midiimport::Options& options, const std::string& patternName, std::string& error)
+bool importInto (Song& song, Report& report, const midiimport::Options& options, const std::string& patternName, std::string& error)
 {
+    return importInto (song, report, options, patternName, std::string(), error);
+}
+
+bool importInto (Song& song, Report& report, const midiimport::Options& options, const std::string& patternName,
+                 const std::string& mediaDirectory, std::string& error)
+{
+    if (report.format == Format::dawproject)
+    {
+        const auto imported = dawproject::importInto (song, report.dawproject, patternName, mediaDirectory, error);
+        report.findings = report.dawproject.findings; // extraction and mapping findings reach the report
+        return imported;
+    }
     if (! report.hasNotes())
     {
         error = "no notes could be recovered from this project:\n" + report.summary();

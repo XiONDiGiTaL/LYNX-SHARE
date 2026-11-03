@@ -206,6 +206,7 @@ target_sources(lynx_core PRIVATE
     src/core/PlaylistTrackOps.cpp
     src/core/ChannelMiscFx.cpp
     src/core/MidiImport.cpp
+    src/core/DawProject.cpp
     src/core/ForeignProject.cpp
     src/core/StartupSound.cpp
     src/core/Speech.cpp

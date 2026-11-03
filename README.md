@@ -187,7 +187,7 @@ Any knob or fader (channel, mixer, effect, plugin parameter) becomes a clip with
 
 #### Projects and files
 - Native `.lynx` format (JSON) with autosave
-- Imports `.flp` and `.mid`, plus Cubase `.cpr` / `.npr` and Cakewalk `.cwp` / `.cwb` / `.wrk` tracks (`docs/FOREIGN_PROJECTS.md`); FL `.fst` presets
+- Imports `.flp` and `.mid`, plus Cubase `.cpr` / `.npr`, Cakewalk `.cwp` / `.cwb` / `.wrk` and DAWproject `.dawproject` tracks, clips and audio (`docs/FOREIGN_PROJECTS.md`); FL `.fst` presets
 - Exports WAV 16/24/32f, FLAC and OGG, song or pattern, with dither
 - Note recording (PC keyboard and MIDI) and audio recording, sample-accurate with a round-trip ping, punch in/out with pre/post-roll, loop takes and comping, crash-safe takes
 - Themes (accent color, background, workspace image) and plugin presets
@@ -249,6 +249,52 @@ A report lists what was converted, what is approximated and what was left out. F
 
 > [!NOTE]
 > Every conversion rule comes from **behavioural** reverse engineering (decompilation studied, official manual and project data), recorded in [`docs/analise/`](docs/analise). Anything not confirmed is flagged as an approximation in [`docs/STATUS.md`](docs/STATUS.md).
+
+## Opens Cubase, Nuendo, Cakewalk and DAWproject projects
+
+Besides `.flp` and `.mid`, *File > Open* takes the projects Steinberg, Cakewalk / BandLab, Bitwig Studio and Studio One
+write, and brings back the part LYNX can honour: the tracks and the notes on them - and, for DAWproject, the audio
+arrangement too.
+
+| Format | Container | What comes in |
+|---|---|---|
+| `.dawproject` (Bitwig Studio, Studio One, Cubase 14, Cubasis, VST Live) | ZIP with `project.xml` and the media | tracks (names, colours, mute, groups), note clips as patterns on the Playlist, audio clips as audio-clip channels with the files extracted from the ZIP, tempo, time signature, markers and fades |
+| `.cpr`, `.npr` (Cubase, Nuendo) | RIFF tree under Steinberg's eight-character `NUNDROOT` form type | the project's version, the plugin UIDs it references, and every standard MIDI part inside it, as notes on tracks |
+| `.cwp`, `.cwb` (Cakewalk, SONAR, BandLab) | OLE2 compound file | the standard MIDI parts inside it, as notes on tracks |
+| `.cwz` | Cakewalk's zip package | identified as a package, and the reader points at the `.cwp` inside |
+| `.wrk` (older Cakewalk) | tag/length chunk stream | the validated chunk walk, the track names and the Cakewalk version |
+| `.mid`, `.midi` | standard MIDI file | notes, tempo, time signature and track names |
+
+Notes land exactly as a `.mid` import lands: one Channel Rack channel per track, a new pattern named after the file,
+tempo and time signature carried over, the source kept in the title (`Song (Cubase)`). A DAWproject goes further
+because its format is specified: one pattern per note clip placed where the clip sits on the Playlist, one audio-clip
+channel per audio file (extracted from the ZIP so the channel keeps playing), markers, and the arrangement in Song
+mode. A summary then states what happened - the format, the tracks and notes, each track's name and channel, and
+anything in the container LYNX has no equivalent for (plugins, automation, track levels, mixer routing).
+
+### Read exactly, or reported
+
+Cubase, Nuendo and Cakewalk each keep their events in a proprietary structure, and none of those structures is
+published. What all three have in common is standard MIDI: they embed MIDI parts inside the project and export MIDI
+files. That is what the reader parses, with its own SMF reader (formats 0, 1 and 2, running status, tempo, time
+signature, track names, converted to LYNX's 960 ticks per quarter note), so the notes that arrive are the project's
+own rather than an interpretation of its binary layout. A container that cannot be read in a form that validates is
+reported instead of half-parsed.
+
+DAWproject is the exception: its ZIP/XML layout is documented by the format's own schema
+([bitwig/dawproject](https://github.com/bitwig/dawproject)), so LYNX reads the arrangement itself instead of
+recovering MIDI. A file whose `project.xml` does not parse is refused with the parser's error, and every element the
+reader does not map is listed in the import summary rather than guessed at.
+
+The readers are plain C++ with no JUCE in them, so they ship under the same test suite as the rest of the core,
+fixtures and all (a `NUNDROOT` project, a `.wrk` record stream, an OLE2 file carrying MIDI, a synthetic SMF, and
+DAWproject projects built from the schema):
+
+```
+./scripts/build-local.sh
+```
+
+Details, format by format: [`docs/FOREIGN_PROJECTS.md`](docs/FOREIGN_PROJECTS.md).
 
 ## Download
 

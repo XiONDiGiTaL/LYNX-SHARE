@@ -121,7 +121,8 @@ private:
     void showAudioSettings();
     void showImportReport();
     void importFlp (const juce::File& file);
-    void importForeignProject (const juce::File& file); // Cubase / Cakewalk / BandLab, through core/ForeignProject.h
+    void importForeignProject (const juce::File& file); // Cubase / Cakewalk / BandLab / DAWproject, through core/ForeignProject.h
+    void importDawProject();
     void flpImported (const juce::File& file); // after the import: title, recent files, missing files
     void openLynxProject (const juce::File& file);
     // The "Missing files" window (ui/MissingFilesDialog.h) for the current project; `afterOpening`: shown by opening a
