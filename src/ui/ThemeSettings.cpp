@@ -4,8 +4,10 @@
 
 #include <juce_audio_formats/juce_audio_formats.h>
 
+#include "core/ThemeKits.h"
 #include "platform/Paths.h"
 #include "ui/ColourPicker.h"
+#include "ui/FoodGlyphs.h"
 #include "ui/I18n.h"
 #include "ui/SettingsPages.h"
 #include "ui/Theme.h"
@@ -343,13 +345,119 @@ public:
     }
 };
 
+// A food kit in Options > Theme, drawn as the food themes were designed: a dark disc with a ring glowing in the kit's
+// accent and the fruit on it, the name under it and the hue and taste words of its caption. Clicking it applies the
+// kit, which seeds the whole palette (core/ThemeKits.h).
+class FoodCard final : public juce::Button
+{
+public:
+    explicit FoodCard (const themes::Kit& k)
+        : juce::Button (juce::String::fromUTF8 (k.name.c_str())), kit (k)
+    {
+        setClickingTogglesState (false);
+        setTooltip (juce::String::fromUTF8 (themes::caption (k).c_str()));
+    }
+
+    const themes::Kit& kitOf() const noexcept { return kit; }
+
+    void setChosen (bool chosen)
+    {
+        if (chosen == isChosen)
+            return;
+        isChosen = chosen;
+        repaint();
+    }
+
+    void paintButton (juce::Graphics& g, bool over, bool down) override
+    {
+        using namespace theme;
+        const auto r = getLocalBounds().toFloat().reduced (1.0f);
+        g.setColour (isChosen || over || down ? colour::bg3 : colour::bg2);
+        g.fillRoundedRectangle (r, radius::lg);
+        g.setColour (isChosen ? colour::accent : colour::border);
+        g.drawRoundedRectangle (r.reduced (0.5f), radius::lg, isChosen ? 1.5f : 1.0f);
+
+        auto area = getLocalBounds().reduced (5);
+        auto badgeArea = area.removeFromTop (juce::jmax (0, area.getHeight() - 34));
+        const auto size = (float) juce::jmin (badgeArea.getWidth(), badgeArea.getHeight());
+        food::paintBadge (g, juce::Rectangle<float> (size, size).withCentre (badgeArea.toFloat().getCentre()), kit, isChosen);
+
+        const juce::String name (juce::String::fromUTF8 (kit.name.c_str()));
+        const juce::String caption (juce::String::fromUTF8 (themes::caption (kit).c_str()));
+        g.setColour (isChosen ? colour::textPrimary : juce::Colour (kit.accent).brighter (0.3f));
+        g.setFont (font (type::caption, true));
+        g.drawText (caps (name), area.removeFromTop (16), juce::Justification::centred, true);
+        g.setColour (colour::textSecondary);
+        g.setFont (monoFont (type::caption));
+        g.drawText (caption.fromFirstOccurrenceOf ("|", false, false).trim(), area.removeFromTop (16), juce::Justification::centred, true);
+    }
+
+private:
+    themes::Kit kit;
+    bool isChosen = false;
+};
+
+// The top of Options > Theme: the logo of the theme in use - the kit's fruit, or the pepper for LYNX's own look and
+// hand-made colours - with its name, its caption and the three colours it is built from.
+class ThemeHero final : public juce::Component
+{
+public:
+    ThemeHero() : kit (themes::kitFor (themes::Spec {})) {}
+
+    void setTheme (const themes::Spec& s)
+    {
+        spec = s;
+        kit = themes::kitFor (s);
+        repaint();
+    }
+
+    void paint (juce::Graphics& g) override
+    {
+        using namespace theme;
+        const auto r = getLocalBounds().toFloat();
+        g.setColour (colour::bg3);
+        g.fillRoundedRectangle (r, radius::lg);
+        g.setColour (colour::border);
+        g.drawRoundedRectangle (r.reduced (0.5f), radius::lg, 1.0f);
+
+        const auto logoSize = juce::jmin (r.getHeight() - 16.0f, 58.0f);
+        const auto logo = juce::Rectangle<float> (logoSize, logoSize).withCentre ({ r.getX() + 14.0f + logoSize * 0.5f, r.getCentreY() });
+        food::paintLogo (g, logo, kit);
+
+        // the three seeds, right-aligned: accent, background, workspace
+        auto x = r.getRight() - 14.0f;
+        for (const auto seed : { kit.accent, kit.background, themes::workspaceColour (spec) })
+        {
+            juce::Rectangle<float> chip (x - 18.0f, r.getCentreY() - 9.0f, 18.0f, 18.0f);
+            g.setColour (juce::Colour (seed | 0xff000000u));
+            g.fillRoundedRectangle (chip, radius::sm);
+            g.setColour (colour::borderStrong);
+            g.drawRoundedRectangle (chip.reduced (0.5f), radius::sm, 1.0f);
+            x = chip.getX() - 6.0f;
+        }
+
+        auto text = r.withTrimmedLeft (logo.getRight() + 14.0f).withTrimmedRight (r.getRight() - x);
+        g.setColour (colour::textPrimary);
+        g.setFont (font (type::title, true));
+        g.drawText (juce::String::fromUTF8 (kit.name.c_str()), text.removeFromTop (24.0f), juce::Justification::bottomLeft, true);
+        g.setColour (colour::textSecondary);
+        g.setFont (monoFont (type::small));
+        g.drawText (juce::String::fromUTF8 (themes::caption (kit).c_str()), text.removeFromTop (18.0f), juce::Justification::topLeft, true);
+    }
+
+private:
+    themes::Spec spec;
+    themes::Kit kit;
+};
+
 class ThemePage final : public ScrollingPage, private juce::Timer
 {
 public:
     ThemePage() : spec (current())
     {
-        for (auto* c : std::initializer_list<juce::Component*> { &presetTitle, &presetBox, &importButton, &exportButton, &savePreset, &resetButton,
-                                                                 &presetNote, &coloursTitle, &accentWell, &backgroundWell, &workspaceWell, &autoWorkspace,
+        for (auto* c : std::initializer_list<juce::Component*> { &hero, &presetTitle, &presetBox, &importButton, &exportButton, &savePreset, &resetButton,
+                                                                 &presetNote, &foodTitle, &foodNote,
+                                                                 &coloursTitle, &accentWell, &backgroundWell, &workspaceWell, &autoWorkspace,
                                                                  &picker, &contrastNote, &imageTitle, &imageButton, &removeImage, &imageName, &fitLabel,
                                                                  &fitBox, &opacityLabel, &opacitySlider, &dimLabel, &dimSlider, &imageListLabel, &imageList,
                                                                  &openBackgrounds, &imageNote, &soundTitle, &soundName, &soundButton, &soundPlay,
@@ -376,6 +484,17 @@ public:
         };
         soundDefault.onClick = [this] { edit ([] (themes::Spec& s) { s.startupSound.clear(); }); };
         styleNote (soundNote, tr ("Played when LYNX SHARE starts (if Settings › General › \"Play the startup sound\" is on). Default: LYNX SHARE's own sound."));
+
+        for (const auto& kit : themes::foodKits())
+        {
+            auto card = std::make_unique<FoodCard> (kit);
+            card->onClick = [this, kit] { applyKit (kit); };
+            add (*card);
+            cards.push_back (std::move (card));
+        }
+        styleNote (foodNote, tr ("The food themes: each fruit is a palette of its own. Its colour becomes the accent (selections, steps, the "
+                                  "playhead, notes), the dark grays are tinted towards it and the workspace takes a deeper shade of the same "
+                                  "family, so the whole window follows the choice."));
 
         presetBox.onChange = [this] { choosePreset(); };
         importButton.onClick = [this] { importTheme(); };
@@ -446,6 +565,7 @@ private:
             area.removeFromTop (6);
             return r;
         };
+        hero.setBounds (row (78));
         presetTitle.setBounds (row (24));
         {
             auto r = row (28);
@@ -459,6 +579,19 @@ private:
             }
         }
         presetNote.setBounds (row (32));
+
+        foodTitle.setBounds (row (24));
+        {
+            // a grid of the food badges: as many columns as the page is wide, in kit order (a hue sweep)
+            const auto cols = juce::jmax (1, (area.getWidth() + 8) / 132);
+            const auto cardW = (area.getWidth() - (cols - 1) * 8) / cols;
+            constexpr int cardH = 150;
+            const auto rows = ((int) cards.size() + cols - 1) / cols;
+            for (int i = 0; i < (int) cards.size(); ++i)
+                cards[(std::size_t) i]->setBounds (area.getX() + (i % cols) * (cardW + 8), area.getY() + (i / cols) * (cardH + 8), cardW, cardH);
+            area.removeFromTop (rows * (cardH + 8));
+        }
+        foodNote.setBounds (row (34));
 
         coloursTitle.setBounds (row (24));
         {
@@ -541,6 +674,11 @@ private:
 
     void refresh (bool refreshPicker = true)
     {
+        hero.setTheme (spec);
+        for (auto& card : cards)
+            card->setChosen ((spec.accent | 0xff000000u) == (card->kitOf().accent | 0xff000000u)
+                             && (spec.background | 0xff000000u) == (card->kitOf().background | 0xff000000u));
+
         accentWell.colour = juce::Colour (spec.accent);
         backgroundWell.colour = juce::Colour (spec.background);
         workspaceWell.colour = juce::Colour (themes::workspaceColour (spec));
@@ -611,6 +749,18 @@ private:
         dimSlider.setValue (std::round (spec.dim * 100.0f), juce::dontSendNotification);
         for (auto* c : std::initializer_list<juce::Component*> { &fitBox, &opacitySlider, &dimSlider })
             c->setEnabled (! spec.image.empty());
+    }
+
+    // a food badge: the kit's colours, workspace and name, applied like a preset (a change from a control)
+    void applyKit (const themes::Kit& kit)
+    {
+        edit ([&kit] (themes::Spec& s) {
+            s.name = kit.name;
+            s.accent = kit.accent;
+            s.background = kit.background;
+            s.workspace = kit.workspace;
+        });
+        select (selected);
     }
 
     void choosePreset()
@@ -725,7 +875,11 @@ private:
     }
 
     themes::Spec spec;
+    ThemeHero hero;
     SectionTitle presetTitle { tr ("Theme") }, coloursTitle { tr ("Colors") }, imageTitle { tr ("Workspace image") };
+    SectionTitle foodTitle { tr ("Food themes") };
+    std::vector<std::unique_ptr<FoodCard>> cards;
+    juce::Label foodNote;
     juce::ComboBox presetBox;
     juce::TextButton importButton { tr ("Import...") }, exportButton { tr ("Export...") }, savePreset { tr ("Save preset...") },
         resetButton { tr ("Default") }, imageButton { tr ("Choose image...") }, removeImage { tr ("Remove") };

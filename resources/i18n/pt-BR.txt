@@ -6599,3 +6599,6 @@ countries: br
 "Record arm: Rec + Play records this insert into a Playlist clip  [RMB] record to a file" = "Armar gravação: Rec + Play grava este insert num clipe da Playlist  [RMB] gravar num arquivo"
 "Recording: {0}" = "Gravando: {0}"
 "dry input" = "entrada seca"
+"Food themes" = "Temas de comida"
+"The food themes: each fruit is a palette of its own. Its colour becomes the accent (selections, steps, the playhead, notes), the dark grays are tinted towards it and the workspace takes a deeper shade of the same family, so the whole window follows the choice." = "Os temas de comida: cada fruta é uma paleta própria. A cor dela vira o destaque (seleções, steps, o cursor de reprodução e as notas), os cinzas escuros ganham o tom dela e a área de trabalho recebe um tom mais profundo da mesma família, então a janela inteira segue a escolha."
+"LYNX SHARE's pepper, in this theme's colour" = "A pimenta do LYNX SHARE, na cor deste tema"

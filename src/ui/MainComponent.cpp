@@ -57,6 +57,7 @@
 #include "ui/AudioEditor.h"
 #include "ui/TempoTapper.h"
 #include "ui/ExportDialog.h"
+#include "ui/FoodGlyphs.h"
 #include "ui/ParametricEqEditor.h"
 #include "ui/PluginWindow.h"
 #include "ui/I18n.h"
@@ -5001,9 +5002,31 @@ std::unique_ptr<juce::AlertWindow> MainComponent::makeAboutWindow()
     struct Logo final : juce::Component
     {
         Logo() { setSize (300, 150); }
+
+        // The food logo (ui/FoodGlyphs.h): the theme's fruit - LYNX's pepper for the default look and hand-made
+        // colours - on a rounded square of the kit's dark surface, edged in its accent, with the theme's name and
+        // caption beside it.
         void paint (juce::Graphics& g) override
         {
-            g.drawImageWithin (logoImage(), 0, 0, getWidth(), getHeight(), juce::RectanglePlacement::centred);
+            using namespace theme;
+            const auto spec = themeui::current();
+            const auto kit = themes::kitFor (spec);
+            const auto* matched = themes::matchKit (spec);
+
+            const auto logo = juce::Rectangle<float> (96.0f, 96.0f).withCentre ({ 66.0f, (float) getHeight() * 0.5f });
+            food::paintLogo (g, logo, kit);
+
+            auto text = juce::Rectangle<float> (logo.getRight() + 18.0f, 0.0f, (float) getWidth() - logo.getRight() - 24.0f, (float) getHeight())
+                            .withSizeKeepingCentre ((float) getWidth() - logo.getRight() - 24.0f, 46.0f);
+            g.setColour (colour::textPrimary);
+            g.setFont (font (type::title, true));
+            g.drawText (juce::String::fromUTF8 ((matched != nullptr ? kit.name : spec.name).c_str()), text.removeFromTop (24.0f),
+                        juce::Justification::bottomLeft, true);
+            g.setColour (colour::textSecondary);
+            g.setFont (monoFont (type::caption));
+            g.drawText (matched != nullptr ? juce::String::fromUTF8 (themes::caption (kit).c_str())
+                                          : tr ("LYNX SHARE's pepper, in this theme's colour"),
+                        text.removeFromTop (16.0f), juce::Justification::topLeft, true);
         }
     };
     struct About final : juce::AlertWindow

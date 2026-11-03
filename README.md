@@ -19,6 +19,7 @@ Windows, macOS and Linux.</p>
   <a href="https://github.com/Ka1-S/LYNX-SHARE/releases"><strong>Download</strong></a> ·
   <a href="#features"><strong>Features</strong></a> ·
   <a href="#opens-fl-studio-projects">FL projects</a> ·
+  <a href="#food-theme-kits">Theme kits</a> ·
   <a href="docs/PLUGINS.md">Built-in plugins</a> ·
   <a href="#building">Building</a> ·
   <a href="docs/STATUS.md">Status</a> ·
@@ -188,7 +189,7 @@ Any knob or fader (channel, mixer, effect, plugin parameter) becomes a clip with
 - Imports `.flp` and `.mid`; FL `.fst` presets
 - Exports WAV 16/24/32f, FLAC and OGG, song or pattern, with dither
 - Note recording (PC keyboard and MIDI) and audio recording, sample-accurate with a round-trip ping, punch in/out with pre/post-roll, loop takes and comping, crash-safe takes
-- Themes (accent color, background, workspace image) and plugin presets
+- Themes (accent color, background, workspace image), thirteen food theme kits (`docs/THEME_KITS.md`) and plugin presets
 - Undo/redo on every edit
 - Opt-in crash and freeze reports (anonymous), or a prefilled GitHub bug report
 - Audio drivers: Windows Audio (WASAPI), DirectSound and ASIO on Windows; Core Audio on macOS; PipeWire (native), JACK and ALSA on Linux
@@ -247,6 +248,79 @@ A report lists what was converted, what is approximated and what was left out. F
 
 > [!NOTE]
 > Every conversion rule comes from **behavioural** reverse engineering (decompilation studied, official manual and project data), recorded in [`docs/analise/`](docs/analise). Anything not confirmed is flagged as an approximation in [`docs/STATUS.md`](docs/STATUS.md).
+
+## Food theme kits
+
+<p align="center">
+  <img src="docs/img/theme-kits.svg" alt="Thirteen food theme kits - Cherry, Watermelon, Tangerine, Banana, Kiwi, Lime, Avocado, Blueberry, Eggplant, Fig, Dragonfruit, Lychee and Coconut - each drawn as its fruit badge" width="100%">
+  <br><sub>Thirteen food kits in <em>Options > Theme</em>, after the six built-in looks: the fruit is the badge, the<br>accent and the logo, and the dark gray surfaces are tinted towards it.</sub>
+</p>
+
+A kit is a seed, not a painted skin. Give it an accent and a background and the theme engine derives everything else the
+interface draws with: panel elevations, hairlines, hover and pressed shades, tinted selections, note colours, and text
+that stays readable on both. The two hex values are the fruit's colour and a dark gray mixed towards it - the light
+accents (Banana, Kiwi, Lime) take dark ink on the accent automatically - and the kit also names its own workspace, a
+deeper surface of the same family, so the fruit reaches the backdrop behind the panels as well.
+
+Each kit carries the identity the theme page draws: its fruit, the words of its caption (`KIWI | GREEN | TART`) and the
+colour of its leaf or skin. `Options > Theme` shows them as the badges the themes were designed around - a dark disc with
+a ring glowing in the kit's accent and the fruit on it - and the same fruit sits on LYNX SHARE's logo tile, a rounded
+square of the kit's dark surface edged and haloed in its accent, in the About window and on the start-up splash.
+
+The fruit is the art from `tools/reference/theme-fruits.png`, cut out of the reference sheet by
+`python tools/extract_fruit_marks.py` (the disc's grey is keyed off, the fruit keeps its own shading) and embedded in the
+binary as 224 px PNGs (`src/ui/FoodMarkData.h`), so the badge shows the design itself rather than a redrawing of it and
+nothing is read from disk at run time. Cherry, Watermelon, Lime, Avocado and Lychee have no art on the sheet yet and
+still draw the vector marks in `src/ui/FoodGlyphs.cpp`; LYNX's own look shows the pepper from the same sheet.
+
+| Kit | Caption | Accent | Background | Workspace |
+|---|---|---|---|---|
+| Cherry | `RED \| BRIGHT` | `#D92B45` | `#160F11` | `#0A0708` |
+| Watermelon | `PINK \| JUICY` | `#FF5C73` | `#101614` | `#070908` |
+| Tangerine | `ORANGE \| ZEST` | `#FF9E1F` | `#1A1209` | `#0C0804` |
+| Banana | `YELLOW \| SWEET` | `#F2C21B` | `#17150D` | `#0B0A06` |
+| Kiwi | `GREEN \| TART` | `#63C46B` | `#101511` | `#070A08` |
+| Lime | `LIME \| SOUR` | `#A6D81C` | `#12150E` | `#080A06` |
+| Avocado | `OLIVE \| CREAMY` | `#7FB53A` | `#12140F` | `#080907` |
+| Blueberry | `BLUE \| BERRY` | `#4E6BE8` | `#0F1320` | `#080A11` |
+| Eggplant | `PURPLE \| RICH` | `#8F5BD6` | `#141019` | `#09070C` |
+| Fig | `INDIGO \| ANCIENT` | `#6D5AE8` | `#121122` | `#08070F` |
+| Dragonfruit | `VIOLET \| EXOTIC` | `#FF4FA3` | `#170F18` | `#0A070B` |
+| Lychee | `BLUSH \| FLORAL` | `#F2A0B5` | `#161114` | `#0A0709` |
+| Coconut | `CREAM \| MELLOW` | `#E4C9A0` | `#16110D` | `#0A0705` |
+
+- **One line to add one.** A kit is an entry in `src/core/ThemeKits.cpp`, and `findKit("coffee")` resolves it by stable
+  id or by its label, so a preset or a layout remembers the kit while the menu shows the name. A new id draws LYNX's
+  pepper until it has a mark of its own - art in `docs/img/marks/<id>.png` (with the id added to the sheet table in
+  `tools/extract_fruit_marks.py` and the header regenerated), or a vector shape in `src/ui/FoodGlyphs.cpp`.
+- **Measured, not eyeballed.** The core tests check every kit, not just the one being edited: at least 7:1 contrast for
+  text on panels and 3:1 on the accent, `accentHover` lighter and `accentPressed` darker than the accent, a darker
+  workspace than the background, unique ids, names and accents, and a caption for each.
+- **Nothing else moved.** Kits arrive through the same `builtInThemes()` list as the six built-in looks, so the theme
+  page, the accent/background overrides and the colours saved in projects behave exactly as before; the gallery, the
+  badge and the logo are additive.
+- **The pictures are the app.** The theme page and the splash below are `LYNX.exe --snapshot` renders with
+  `LYNX_SNAPSHOT_THEME` pointed at a `.lynxtheme` (the song is `LYNX.exe --showcase song.lynx`), so any theme can be
+  re-rendered in one command. The badge sheet above is generated instead: `python tools/make_theme_kits.py` rewrites
+  `docs/img/theme-kits.svg` from the kit table, embedding the same mark PNGs the app draws (vector shapes only for the
+  kits without art), so the sheet cannot drift from the badges (add `--png out.png` for a quick preview).
+
+### In the app
+
+<table>
+<tr>
+<td width="50%" valign="top">
+<img src="docs/img/theme-gallery.png" alt="Options > Theme in the Banana theme: the theme's logo, caption and seeds above the food gallery of thirteen badges">
+<br><sub><strong>Options > Theme</strong>, Banana applied: the theme's logo, name, caption and three seeds at the top, and
+the food gallery under it - every kit as its badge, the one in use ringed brighter. A click applies that kit.</sub>
+</td>
+<td width="50%" valign="top">
+<img src="docs/img/theme-splash.png" alt="The start-up splash in the Banana theme: the banana logo landing on the card">
+<br><sub><strong>The start-up splash</strong> drops the same fruit - the theme's logo - over a card and a wordmark in its
+accent, so Blueberry opens blue and Dragonfruit pink.</sub>
+</td>
+</tr>
+</table>
 
 ## Download
 

@@ -190,6 +190,7 @@ target_sources(lynx_core PRIVATE
     src/core/RackOps.cpp
     src/core/ChannelMiscFx.cpp
     src/core/MidiImport.cpp
+    src/core/ThemeKits.cpp
     src/core/StartupSound.cpp
     src/core/Speech.cpp
     src/core/SpeechRules.cpp)
@@ -391,6 +392,7 @@ if(LYNX_BUILD_APP)
         src/ui/VfxEditors.cpp
         src/ui/BrowserComponent.cpp
         src/ui/Theme.cpp
+        src/ui/FoodGlyphs.cpp
         src/ui/ThemeSettings.cpp
         src/ui/ColourPicker.cpp
         src/ui/Icons.cpp
