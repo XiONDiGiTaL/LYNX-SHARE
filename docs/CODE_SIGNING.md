@@ -19,7 +19,8 @@ the repository already does for that and what the maintainer has to do by hand.
 The release workflow: `build` (Ubuntu) cross-compiles `LYNX.exe` with Zig 0.14.1 and JUCE 8.0.4 (both downloaded and
 checked by SHA-256) → `sign` (SignPath, when enabled) → `package` (Windows) checks the version resource and the
 signature, runs `LYNX.exe --selftest`, writes `Demo.lynx`, builds `LYNX-<version>-windows-x64.zip` and
-`SHA256SUMS.txt`, and on a tag push attaches them to the GitHub release (creating a draft release if none exists).
+`SHA256SUMS.txt`, and on a tag push publishes the GitHub release with them on it (creating the release if none exists,
+and naming any platform that was not built).
 
 ## Step by step for the maintainer
 
@@ -96,8 +97,9 @@ English and `PT` strings) remove "pending approval", and drop the SmartScreen no
 2. The `Release` workflow starts; the `sign` job submits a signing request and waits.
 3. Open the request in <https://app.signpath.io> (you also get an e-mail), check that it comes from the expected
    commit and workflow run, and click **Approve** within 3 hours (otherwise the job times out; re-run it from the Actions tab).
-4. The `package` job self-tests the signed exe and attaches `LYNX.exe`, the zip and `SHA256SUMS.txt` to the release
-   (a draft is created if the release does not exist yet). Edit the notes and publish.
+4. The `package` job self-tests the signed exe and the `publish` job attaches `LYNX.exe`, the zip and `SHA256SUMS.txt`
+   to the release, which is published by the workflow itself (created if it does not exist yet; a tag with a hyphen
+   is marked prerelease). Windows and Linux must build; macOS is optional and the notes say when it is missing.
 
 Only binaries from this workflow may be signed; never upload a locally built exe for signing.
 

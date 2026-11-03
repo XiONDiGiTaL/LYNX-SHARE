@@ -1,9 +1,11 @@
 # Release steps
 
 Official release files come from GitHub Actions (`.github/workflows/release.yml`, see `docs/CODE_SIGNING.md`):
-a tag push builds `LYNX.exe` from the tagged source, runs the self-test on Windows and attaches to a draft release
+a tag push builds `LYNX.exe` from the tagged source, runs the self-test on Windows and publishes the GitHub release
 (titled "LYNX SHARE x.y.z"; the product is named LYNX SHARE since v0.1.20, while the file names below, `LYNX.exe` and the
-settings folders keep "LYNX" so existing installs, links and AppImage updates keep working):
+settings folders keep "LYNX" so existing installs, links and AppImage updates keep working). The release is published,
+not left in draft, and its body lists the files that were built and names any platform that was not — so tagging alone
+finishes a release, and nothing is promised that is not attached:
 
 - `LYNX-x.y.z-setup-x64.exe` — per-user installer (NSIS, `resources/installer/LYNX.nsi`, no admin rights): installs to
   `%LOCALAPPDATA%\Programs\LYNX`, Start-menu shortcut, optional desktop shortcut, `.lynx` association, optional
@@ -24,6 +26,12 @@ settings folders keep "LYNX" so existing installs, links and AppImage updates ke
 `workflow_dispatch` (Actions → Release → Run workflow, or `gh workflow run release.yml --ref <branch>`) builds and
 checks everything without a tag and keeps the files as workflow artifacts only.
 
+Windows and Linux are required: if either job fails, nothing is published. macOS and the MSIX are not — an account or
+fork without macOS runner capacity reports the macOS job as cancelled before it starts, and the release still goes out
+with the Windows and Linux files, its notes saying **No macOS build** and why (the MSIX step is already allowed to fail
+without holding the release back). To complete such a release, build the `.dmg` with `scripts/package-macos.sh` and
+`gh release upload <tag> <file>.dmg`; that does not touch the notes.
+
 Steps:
 1. Bump the version in `CMakeLists.txt` (`project(LYNX VERSION x.y.z)`, the single source) and the download badge in
    `README.md`.
@@ -34,7 +42,8 @@ Steps:
    the zip and `SHA256SUMS.txt` to `dist/`. NSIS: `makensis` on PATH, `$MAKENSIS`, or the NSIS zip release unpacked
    into `~/opt/nsis-<version>` (its `makensis.exe` runs through WSL interop). Quick installer check:
    `setup.exe /S /D=C:\some\test\folder`, then `C:\some\test\folder\Uninstall.exe /S`.
-4. `git tag vx.y.z-alpha && git push origin vx.y.z-alpha`; when the workflow finishes, edit the draft release notes
-   and publish it.
+4. `git tag vx.y.z-alpha && git push origin vx.y.z-alpha`; the workflow publishes the release when it finishes (a tag
+   with a hyphen is marked as a prerelease, a plain `vx.y.z` is not). Edit the notes afterwards if the generated file
+   list needs prose — re-running the workflow on the same tag uploads the files again and leaves the notes alone.
 5. Microsoft Store: upload `LYNX-x.y.z-alpha-store.msix` as a new submission (`docs/STORE.md` › *Updating the Store
    version*).

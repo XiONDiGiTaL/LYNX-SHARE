@@ -14,7 +14,9 @@
 #                       AppImage and .tar.gz (scripts/package-linux.sh), offline start check of the AppImage
 #   macos    (macos)    CMake universal (arm64 + x86_64) build, self-test, ad-hoc signature (no Apple Developer ID,
 #                       not notarized), .dmg (scripts/package-macos.sh)
-#   publish  (ubuntu)   SHA256SUMS.txt over every file; on a tag push attaches everything to the (draft) GitHub release
+#   publish  (ubuntu)   SHA256SUMS.txt over every file; on a tag push publishes the GitHub release with everything on it,
+#                       naming any platform whose job did not produce a package (macOS is optional; Windows and Linux
+#                       are not), so tagging alone finishes a release
 name: Release
 
 on:
@@ -426,12 +428,16 @@ jobs:
   publish:
     name: Checksums and release
     needs: [version, package, linux, macos]
-    if: ${{ !cancelled() && needs.package.result == 'success' && needs.linux.result == 'success' && needs.macos.result == 'success' }}
+    # Windows and Linux must build; macOS is optional. An account or fork without macOS runner capacity cancels that job
+    # before it starts, and a missing .dmg must not cost the release its Windows and Linux files. The release notes name
+    # every platform that is missing, so nothing is claimed that is not there.
+    if: ${{ !cancelled() && needs.package.result == 'success' && needs.linux.result == 'success' }}
     runs-on: ubuntu-24.04
     permissions:
-      contents: write   # attach the files to the release on a tag push
+      contents: write   # publish the release on a tag push
     env:
       LABEL: ${{ needs.version.outputs.label }}
+      MACOS_RESULT: ${{ needs.macos.result }}
     steps:
       - name: Download the packages
         uses: actions/download-artifact@v8
@@ -439,6 +445,31 @@ jobs:
           pattern: LYNX-${{ env.LABEL }}-*
           path: dist
           merge-multiple: true
+
+      # The body is generated from what actually arrived, so a release built without a macOS runner says so instead of
+      # pointing at a .dmg that is not there. Only used when the release is created (an existing release keeps its notes).
+      - name: Release notes
+        shell: bash
+        run: |
+          {
+            echo "Built from \`$GITHUB_SHA\` by [this workflow run]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID)."
+            echo
+            echo "| File | Size |"
+            echo "|---|---|"
+            for f in dist/*; do
+              printf '| `%s` | %s |\n' "$(basename "$f")" "$(du -h "$f" | cut -f1)"
+            done
+            if [[ -z "$(ls dist/*.dmg 2>/dev/null)" ]]; then
+              echo
+              echo "**No macOS build:** the macOS job ended as \`$MACOS_RESULT\`. Re-run this workflow on a repository with a" \
+                "macOS runner, or build the .dmg with \`scripts/package-macos.sh\` and attach it here."
+            fi
+            if [[ -z "$(ls dist/*.msix 2>/dev/null)" ]]; then
+              echo
+              echo "**No Microsoft Store package:** the MSIX step did not produce one (it does not hold back the release)."
+            fi
+          } > release-notes.md
+          cat release-notes.md
 
       # The in-app updater (src/core/UpdateCheck.cpp, round 166b) picks the release files by these names: keep them stable.
       # LYNX-<label>-setup-x64.exe, LYNX-<label>-windows-x64.zip, LYNX-<label>-macos-universal.dmg (any *.dmg),
@@ -458,15 +489,19 @@ jobs:
           path: dist/*
           if-no-files-found: error
 
-      - name: Attach to the GitHub release
+      - name: Publish the GitHub release
         if: github.ref_type == 'tag'
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
           tag="$GITHUB_REF_NAME"
+          flags=(--title "LYNX SHARE ${tag#v}")
+          # v0.1.22-alpha is a prerelease; v1.0.0 is not. The tag decides, so no manual switch to forget.
+          if [[ "$tag" == *-* ]]; then flags+=(--prerelease); fi
           if ! gh release view "$tag" > /dev/null 2>&1; then
-            gh release create "$tag" --draft --prerelease --title "LYNX SHARE ${tag#v}" \
-              --notes "Built from \`$GITHUB_SHA\` by [this workflow run]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID)."
+            gh release create "$tag" "${flags[@]}" --notes-file release-notes.md
           fi
           gh release upload "$tag" dist/* --clobber
+          # also lifts a release an earlier, incomplete attempt left in draft: a tag needs no manual step to go live
+          gh release edit "$tag" --draft=false

@@ -69,8 +69,8 @@ round 117 notes (`docs/analise/REA_rodada117.md`) list the measured differences.
 - macOS: `cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" && cmake --build build --target LYNX`,
   then `scripts/package-macos.sh build/LYNX_artefacts/Release/LYNX.app <label> dist`.
 - CI: `.github/workflows/tests.yml` runs the core tests on Linux (GCC, Clang) and macOS and builds + self-tests the
-  app on Linux and macOS; `release.yml` builds all three platforms on a tag and attaches the packages and
-  `SHA256SUMS.txt` to the draft release.
+  app on Linux and macOS; `release.yml` builds all three platforms on a tag and publishes the packages and
+  `SHA256SUMS.txt` on the release (Windows and Linux are required, macOS is optional and its absence is noted).
 
 ## Windows plugins on Linux (yabridge)
 
