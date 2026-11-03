@@ -187,7 +187,7 @@ Any knob or fader (channel, mixer, effect, plugin parameter) becomes a clip with
 
 #### Projects and files
 - Native `.lynx` format (JSON) with autosave
-- Imports `.flp` and `.mid`; FL `.fst` presets
+- Imports `.flp` and `.mid`, plus Cubase `.cpr` / `.npr` and Cakewalk `.cwp` / `.cwb` / `.wrk` tracks (`docs/FOREIGN_PROJECTS.md`); FL `.fst` presets
 - Exports WAV 16/24/32f, FLAC and OGG, song or pattern, with dither
 - Note recording (PC keyboard and MIDI) and audio recording, sample-accurate with a round-trip ping, punch in/out with pre/post-roll, loop takes and comping, crash-safe takes
 - Themes (accent color, background, workspace image) and plugin presets
@@ -434,6 +434,7 @@ docs/         architecture, status, roadmap and the behavioural analysis of FL S
 |---|---|
 | [`docs/STATUS.md`](docs/STATUS.md) | what works, what is approximated and what is missing |
 | [`docs/PLUGINS.md`](docs/PLUGINS.md) | the built-in plugins, what each one is compatible with, and its status |
+| [`docs/FOREIGN_PROJECTS.md`](docs/FOREIGN_PROJECTS.md) | what the Cubase, Nuendo, Cakewalk and BandLab readers bring in, and what they report instead of guessing |
 | [`docs/ROADMAP.md`](docs/ROADMAP.md) | project phases |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | how the engine and the UI are organised |
 | [`docs/CODE_SIGNING.md`](docs/CODE_SIGNING.md) | how releases are built and code-signed (SignPath) |

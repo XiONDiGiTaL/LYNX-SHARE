@@ -3826,6 +3826,7 @@ countries: br
 "Automation (the controls you move: automation clips in song mode, pattern events in pattern mode)" = "Automação (os controles que você mexe: clipes de automação no modo música, eventos do pattern no modo pattern)"
 "Import MIDI file" = "Importar arquivo MIDI"
 "Could not import" = "Não foi possível importar"
+"Imported" = "Importado"
 "No parameter" = "Nenhum parâmetro"
 "Parameter" = "Parâmetro"
 "Edit automation clip..." = "Editar clipe de automação..."
