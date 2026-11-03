@@ -18,7 +18,9 @@ std::uint64_t rotl (std::uint64_t x, int k) { return (x << k) | (x >> (32 - k));
 }
 
 FlRand::FlRand (std::uint64_t seed)
-    : s0 (seed), s1 ((std::uint64_t) (((unsigned __int128) seed * 75u + 74u) % 65537u))
+    // (seed * 75 + 74) mod 65537: reducing the seed first is exact for this modulus and needs no 128-bit type, which
+    // MSVC does not have (the cast was only there to keep the product from overflowing before the remainder).
+    : s0 (seed), s1 (((seed % 65537ull) * 75ull + 74ull) % 65537ull)
 {
 }
 
