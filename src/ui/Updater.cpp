@@ -63,7 +63,8 @@ juce::File downloadsFolder()
 }
 
 juce::File settingsPath() { return platform::settingsFile ("updates.txt"); }
-juce::File cachePath() { return platform::settingsFile ("update-cache.json"); }
+// One cache per source: switching Settings › General › "Update source" must not hand back the other list.
+juce::File cachePath (update::Source source) { return platform::settingsFile ("update-cache-" + juce::String (update::sourceId (source)) + ".json"); }
 
 update::Settings loadSettings() { return update::parseSettings (utf8 (settingsPath().loadFileAsString())); }
 void saveSettings (const update::Settings& s) { settingsPath().replaceWithText (fromUtf8 (update::formatSettings (s))); }
@@ -399,9 +400,9 @@ void check (bool manual)
         const auto now = juce::Time::currentTimeMillis();
         const bool fixture = url.isNotEmpty();
         bool fetched = false;
-        if (! manual && ! fixture && update::cacheFresh (settings.lastCheckMs, now) && cachePath().existsAsFile())
-            text = cachePath().loadFileAsString();
-        else if (c.fetchText (fixture ? url : juce::String (update::releasesUrl), text, failure))
+        if (! manual && ! fixture && update::cacheFresh (settings.lastCheckMs, now) && cachePath (settings.source).existsAsFile())
+            text = cachePath (settings.source).loadFileAsString();
+        else if (c.fetchText (fixture ? url : juce::String (update::releasesUrlFor (settings.source)), text, failure))
             fetched = true;
 
         std::string parseError;
@@ -410,7 +411,7 @@ void check (bool manual)
             failure = fromUtf8 (parseError);
         if (fetched && failure.isEmpty() && ! fixture)
         {
-            cachePath().replaceWithText (text);
+            cachePath (settings.source).replaceWithText (text);
             settings.lastCheckMs = now;
             saveSettings (settings);
         }
@@ -451,7 +452,7 @@ void check (bool manual)
 
 juce::String versionText (const update::Release& r) { return fromUtf8 (r.version.text()); }
 
-juce::String releasePage (const update::Release& r) { return r.page.empty() ? juce::String (update::releasesPage) : fromUtf8 (r.page); }
+juce::String releasePage (const update::Release& r) { return r.page.empty() ? juce::String (update::releasesPageFor (currentSource())) : fromUtf8 (r.page); }
 
 void fail (const juce::String& why)
 {
@@ -743,6 +744,19 @@ void setAutomatic (bool on)
     saveSettings (s);
 }
 
+update::Source currentSource() { return loadSettings().source; }
+
+void setSource (update::Source which)
+{
+    auto settings = loadSettings();
+    if (settings.source == which)
+        return;
+    settings.source = which;
+    settings.lastCheckMs = 0; // ask the new source now rather than trust the old list's age
+    saveSettings (settings);
+}
+
+
 void setHost (Host host) { controller().host = std::move (host); }
 
 // set when this start follows an update: no automatic check this session (the "updated" bar stays)
@@ -803,7 +817,7 @@ void afterStart()
             justUpdated = true;
             auto& c = controller();
             // the release notes come from the cached list when there is one
-            const auto list = update::parseReleases (utf8 (cachePath().loadFileAsString()));
+            const auto list = update::parseReleases (utf8 (cachePath (currentSource()).loadFileAsString()));
             c.release = {};
             const auto installed = version.isNotEmpty() ? update::parseVersion (utf8 (version)) : runningVersion();
             for (const auto& r : list)

@@ -267,12 +267,22 @@ public:
         // round 166b: the update check (ui/Updater.h); the Store build has none (the Store updates it)
         toggle (checkUpdates, tr ("Check for updates automatically"), options.checkUpdates, [this] (bool on) { options.checkUpdates = on; });
         checkNow.onClick = [] { updater::checkNow(); };
+        // which release list the check reads: upstream, or the fork this build came from (ui/Updater.h)
+        updateSourceBox.addItem (tr ("Official (Ka1-S)"), 1);
+        updateSourceBox.addItem (tr ("This fork (mine)"), 2);
+        updateSourceBox.setSelectedId (updater::currentSource() == update::Source::fork ? 2 : 1, juce::dontSendNotification);
+        updateSourceBox.onChange = [this]
+        {
+            updater::setSource (updateSourceBox.getSelectedId() == 2 ? update::Source::fork : update::Source::official);
+            if (options.checkUpdates)
+                updater::checkNow();
+        };
         styleNote (updatesNote, tr ("At start-up LYNX SHARE asks GitHub for the newest version number (nothing about you is sent) and shows a bar "
                                     "when a new version is out. Help > Check for updates... asks at any time."));
-        for (auto* c : std::initializer_list<juce::Component*> { &updatesTitle, &checkUpdates, &checkNow, &updatesNote })
+        for (auto* c : std::initializer_list<juce::Component*> { &updatesTitle, &checkUpdates, &checkNow, &updatesNote, &updateSourceLabel, &updateSourceBox })
             c->setVisible (updater::offered());
 
-        for (auto* b : { &languageBox, &scaleBox, &menuBox, &wavesBox, &noteNamesBox, &blackNotesBox, &pluginStyleBox, &editInBox, &undoBox, &autosaveBox, &keepBox, &crashBox })
+        for (auto* b : { &languageBox, &scaleBox, &menuBox, &wavesBox, &noteNamesBox, &blackNotesBox, &pluginStyleBox, &editInBox, &undoBox, &autosaveBox, &keepBox, &crashBox, &updateSourceBox })
             styleCombo (*b);
         juce::ignoreUnused (engine, persistent);
     }
@@ -344,6 +354,7 @@ private:
             auto row = r.full (24);
             checkNow.setBounds (row.removeFromRight (juce::jmin (row.getWidth() / 3, 150)));
             checkUpdates.setBounds (row.withTrimmedRight (8));
+            updateSourceBox.setBounds (r.row (updateSourceLabel, 200));
             updatesNote.setBounds (r.full (32).translated (0, -1));
         }
         displayTitle.setVisible (false);
@@ -398,9 +409,9 @@ private:
     GeneralOptions options;
     SectionTitle languageTitle { tr ("Language and display") }, displayTitle, startupTitle { tr ("Startup") }, editingTitle { tr ("Editing") },
         backupTitle { tr ("Backup") }, pluginsTitle { tr ("Plugins and shortcuts") }, reportsTitle { tr ("Crash reports") }, updatesTitle { tr ("Updates") };
-    juce::Label languageLabel, languageNote, scaleLabel, menuLabel, wavesLabel, noteNamesLabel, blackNotesLabel, pluginStyleLabel, editInLabel, undoLabel, autosaveLabel, keepLabel, sandboxNote, substitutesNote, shortcutsNote, crashLabel, crashNote, updatesNote;
+    juce::Label languageLabel, languageNote, scaleLabel, menuLabel, wavesLabel, noteNamesLabel, blackNotesLabel, pluginStyleLabel, editInLabel, undoLabel, autosaveLabel, keepLabel, sandboxNote, substitutesNote, shortcutsNote, crashLabel, crashNote, updatesNote, updateSourceLabel { tr ("Update source") };
     juce::HyperlinkButton translationLink;
-    juce::ComboBox crashBox, languageBox, scaleBox, menuBox, wavesBox, noteNamesBox, blackNotesBox, pluginStyleBox, editInBox, undoBox, autosaveBox, keepBox;
+    juce::ComboBox crashBox, languageBox, scaleBox, menuBox, wavesBox, noteNamesBox, blackNotesBox, pluginStyleBox, editInBox, undoBox, autosaveBox, keepBox, updateSourceBox;
     juce::ToggleButton stereoWaves, reducedEffects, gpuRendering, splash, startupSound, scanAtStart, menuEntry, typingPiano, keepEditors, rememberSeek, clipsLoop, firstChannel, alternateUndo, sandbox, substitutes, unusedTakes, checkUpdates;
     juce::TextButton openBackups { tr ("Open backup folder") }, managePlugins { tr ("Plugin manager...") }, manageShortcuts { tr ("Manage shortcuts...") },
         checkNow { tr ("Check now") };

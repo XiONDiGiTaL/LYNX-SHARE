@@ -910,6 +910,17 @@ std::string releaseNotesText (const std::vector<NoteLine>& lines)
 // ================================================================================================================
 // settings
 // ================================================================================================================
+// --- the release source ------------------------------------------------------------------------------------------
+const char* sourceId (Source source) { return source == Source::fork ? "fork" : "official"; }
+
+Source sourceFromId (const std::string& id) { return trim (id) == "fork" ? Source::fork : Source::official; }
+
+const char* releasesUrlFor (Source source) { return source == Source::fork ? forkReleasesUrl : releasesUrl; }
+
+const char* releasesPageFor (Source source) { return source == Source::fork ? forkReleasesPage : releasesPage; }
+
+const char* sourceRepo (Source source) { return source == Source::fork ? "XiONDiGiTaL/LYNX-SHARE" : "Ka1-S/LYNX-SHARE"; }
+
 Settings parseSettings (const std::string& text)
 {
     Settings s;
@@ -927,6 +938,8 @@ Settings parseSettings (const std::string& text)
             s.skipped = parseVersion (value).valid ? value : std::string();
         else if (key == "lastCheck")
             s.lastCheckMs = allDigits (value) ? std::strtoll (value.c_str(), nullptr, 10) : 0;
+        else if (key == "source")
+            s.source = sourceFromId (value);
     }
     return s;
 }
@@ -938,6 +951,7 @@ std::string formatSettings (const Settings& s)
         out += "skipped=" + s.skipped + "\n";
     if (s.lastCheckMs > 0)
         out += "lastCheck=" + std::to_string (s.lastCheckMs) + "\n";
+    out += std::string ("source=") + sourceId (s.source) + "\n";
     return out;
 }
 

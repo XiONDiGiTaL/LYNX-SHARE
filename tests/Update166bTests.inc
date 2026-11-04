@@ -242,3 +242,37 @@ TEST (update166b_release_notes_as_text)
     const auto logo = releaseNotes ("<p align=\"center\"><img src=\"x.png\" width=\"96\"></p>\n\n**LYNX SHARE 0.1.20 alpha**: text");
     CHECK (logo.size() == 1 && logo[0].text == "LYNX SHARE 0.1.20 alpha: text");
 }
+
+TEST (update166b_release_source)
+{
+    using namespace lynx::update;
+
+    // the two lists are different addresses, each naming its own repository
+    CHECK (std::string (releasesUrlFor (Source::official)).find ("Ka1-S/LYNX-SHARE") != std::string::npos);
+    CHECK (std::string (releasesUrlFor (Source::fork)).find ("XiONDiGiTaL/LYNX-SHARE") != std::string::npos);
+    CHECK (std::string (releasesUrlFor (Source::official)) != std::string (releasesUrlFor (Source::fork)));
+    CHECK (std::string (releasesPageFor (Source::fork)).find ("github.com/XiONDiGiTaL/LYNX-SHARE") != std::string::npos);
+    CHECK (std::string (sourceRepo (Source::fork)) == "XiONDiGiTaL/LYNX-SHARE");
+
+    // ids round-trip; anything else means upstream, so an older file cannot point at an unknown feed
+    CHECK (sourceFromId ("fork") == Source::fork);
+    CHECK (sourceFromId ("official") == Source::official);
+    CHECK (sourceFromId ("nonsense") == Source::official);
+    CHECK (sourceFromId ("") == Source::official);
+    CHECK (std::string (sourceId (Source::fork)) == "fork");
+    CHECK (std::string (sourceId (Source::official)) == "official");
+    CHECK (sourceFromId (sourceId (Source::fork)) == Source::fork);
+
+    // the setting survives a save/load, and defaults to upstream for a file written before it existed
+    Settings s;
+    CHECK (s.source == Source::official);
+    s.source = Source::fork;
+    CHECK (parseSettings (formatSettings (s)).source == Source::fork);
+    CHECK (parseSettings ("source=official\n").source == Source::official);
+    CHECK (parseSettings ("source=bogus\n").source == Source::official);
+    CHECK (parseSettings ("automatic=1\nskipped=0.1.22\n").source == Source::official);
+
+    // the rest of the settings still parse next to it
+    const auto mixed = parseSettings ("automatic=0\nsource=fork\nlastCheck=1761900000000\n");
+    CHECK (! mixed.automatic && mixed.source == Source::fork && mixed.lastCheckMs == 1761900000000LL);
+}

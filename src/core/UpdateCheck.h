@@ -130,12 +130,27 @@ struct NoteLine
 std::vector<NoteLine> releaseNotes (const std::string& markdown);
 std::string releaseNotesText (const std::vector<NoteLine>&); // the same as plain text ("• " bullets)
 
+// --- the release source -----------------------------------------------------------------------------------------
+// Where the release list comes from: the upstream project (Ka1-S) or the fork this build was made from, so a build
+// carrying work that is not upstream yet can update itself from its own releases. Settings › General picks one.
+enum class Source
+{
+    official, // Ka1-S/LYNX-SHARE
+    fork      // XiONDiGiTaL/LYNX-SHARE
+};
+const char* sourceId (Source);                  // "official", "fork" (updates.txt)
+Source sourceFromId (const std::string& id);    // official for anything else
+const char* releasesUrlFor (Source);            // the GitHub API list (prereleases included)
+const char* releasesPageFor (Source);           // the page a browser opens
+const char* sourceRepo (Source);                // "Ka1-S/LYNX-SHARE"
+
 // --- settings (updates.txt in the settings folder) --------------------------------------------------------------
 struct Settings
 {
     bool automatic = true;      // Settings › General › "Check for updates automatically"
     std::string skipped;        // the version the user skipped (✕ on the bar): that one and older stay quiet
     std::int64_t lastCheckMs = 0; // when the release list was last fetched (the cache's age)
+    Source source = Source::official; // which release list the check reads
 };
 Settings parseSettings (const std::string& text);
 std::string formatSettings (const Settings&);
@@ -153,4 +168,6 @@ bool cacheFresh (std::int64_t lastCheckMs, std::int64_t nowMs);
 // own token, and dropped anyway).
 constexpr const char* releasesUrl = "https://api.github.com/repos/Ka1-S/LYNX-SHARE/releases?per_page=10";
 constexpr const char* releasesPage = "https://github.com/Ka1-S/LYNX-SHARE/releases";
+constexpr const char* forkReleasesUrl = "https://api.github.com/repos/XiONDiGiTaL/LYNX-SHARE/releases?per_page=10";
+constexpr const char* forkReleasesPage = "https://github.com/XiONDiGiTaL/LYNX-SHARE/releases";
 } // namespace lynx::update

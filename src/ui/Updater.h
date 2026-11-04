@@ -30,6 +30,11 @@ bool offered(); // this build looks for updates at all (false: the Store build) 
 bool automatic();
 void setAutomatic (bool on);
 
+// Which release list the check reads (Settings › General › "Update source"): upstream or this fork. Switching resets
+// the cached list so the next check asks the new source.
+update::Source currentSource();
+void setSource (update::Source);
+
 // What the main window lends the updater: "save the project, then go on" (the quit prompt) and the project to reopen.
 struct Host
 {
