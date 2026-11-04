@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <filesystem>
 #include <fstream>
 #include <iterator>
 #include <sstream>
@@ -67,6 +68,115 @@ void addUnique (std::vector<std::string>& list, const std::string& value)
         return;
     if (std::find (list.begin(), list.end(), value) == list.end())
         list.push_back (value);
+}
+
+// --- the audio that lives beside a project ----------------------------------------------------------------------
+std::string lowerAscii (std::string s)
+{
+    for (auto& c : s)
+        c = (char) std::tolower ((unsigned char) c);
+    return s;
+}
+
+std::string fileNameOf (const std::string& path)
+{
+    const auto cut = path.find_last_of ("/\\");
+    return cut == npos ? path : path.substr (cut + 1);
+}
+
+std::string stemOf (const std::string& path)
+{
+    auto name = fileNameOf (path);
+    if (const auto dot = name.find_last_of ('.'); dot != npos && dot > 0)
+        name.erase (dot);
+    return name;
+}
+
+std::string extensionOf (const std::string& path)
+{
+    const auto name = fileNameOf (path);
+    const auto dot = name.find_last_of ('.');
+    return dot == npos ? std::string() : lowerAscii (name.substr (dot + 1));
+}
+
+bool isAudioFile (const std::string& path)
+{
+    const auto ext = extensionOf (path);
+    return ext == "wav" || ext == "wave" || ext == "mp3" || ext == "mp2" || ext == "aif" || ext == "aiff"
+        || ext == "flac" || ext == "m4a" || ext == "ogg" || ext == "caf" || ext == "w64";
+}
+
+std::uint32_t be32At (const std::vector<std::uint8_t>& d, std::size_t at)
+{
+    return at + 4 <= d.size() ? ((std::uint32_t) d[at] << 24) | ((std::uint32_t) d[at + 1] << 16)
+                                   | ((std::uint32_t) d[at + 2] << 8) | (std::uint32_t) d[at + 3]
+                             : 0;
+}
+
+// The length of a WAV / AIFF file, in seconds (0 when the header is not one this reads). Only the headers are parsed:
+// the samples are never touched, so a 70 MB take costs a 64 KB read.
+double audioSeconds (const std::string& path)
+{
+    std::ifstream in (path, std::ios::binary);
+    if (! in)
+        return 0.0;
+    std::vector<std::uint8_t> head (65536);
+    in.read (reinterpret_cast<char*> (head.data()), (std::streamsize) head.size());
+    head.resize ((std::size_t) in.gcount());
+    if (head.size() < 12)
+        return 0.0;
+
+    if (std::memcmp (head.data(), "RIFF", 4) == 0 && std::memcmp (head.data() + 8, "WAVE", 4) == 0)
+    {
+        std::uint32_t rate = 0, byteRate = 0;
+        for (std::size_t at = 12; at + 8 <= head.size();)
+        {
+            const auto id = std::string (reinterpret_cast<const char*> (head.data() + at), 4);
+            const auto length = (std::size_t) le32 (head.data() + at + 4);
+            const auto body = at + 8;
+            if (id == "fmt " && length >= 16 && body + 16 <= head.size())
+            {
+                rate = le32 (head.data() + body + 4);
+                byteRate = le32 (head.data() + body + 8);
+            }
+            else if (id == "data")
+            {
+                if (rate > 0 && byteRate > 0)
+                    return (double) length / (double) byteRate;
+                return 0.0;
+            }
+            if (length == 0 || length > head.size())
+                break; // truncated header (a chunk larger than what was read): nothing more to learn here
+            at = body + length + (length & 1);
+        }
+        return 0.0;
+    }
+
+    // AIFF / AIFC: COMM carries the frame count and the (80-bit) sample rate.
+    if (std::memcmp (head.data(), "FORM", 4) == 0
+        && (std::memcmp (head.data() + 8, "AIFF", 4) == 0 || std::memcmp (head.data() + 8, "AIFC", 4) == 0))
+    {
+        for (std::size_t at = 12; at + 8 <= head.size();)
+        {
+            const auto id = std::string (reinterpret_cast<const char*> (head.data() + at), 4);
+            const auto length = (std::size_t) be32At (head, at + 4);
+            const auto body = at + 8;
+            if (id == "COMM" && length >= 18 && body + 18 <= head.size())
+            {
+                const auto frames = (std::uint32_t) be32At (head, body + 2);
+                const auto exp = (int) (((std::uint16_t) head[body + 8] << 8) | head[body + 9]) - 16383;
+                const auto mantissa = (std::uint64_t) be32At (head, body + 10) | ((std::uint64_t) head[body + 14] << 32);
+                if (mantissa == 0)
+                    return 0.0;
+                const auto rate = std::ldexp ((double) mantissa, exp - 63);
+                return rate > 0.0 ? (double) frames / rate : 0.0;
+            }
+            if (length == 0 || length > head.size())
+                break;
+            at = body + length + (length & 1);
+        }
+    }
+    return 0.0;
 }
 
 // A variable-length quantity (MIDI delta times and meta lengths).
@@ -258,7 +368,7 @@ Format detect (const std::uint8_t* data, std::size_t size, const std::string& ex
     constexpr std::uint8_t ole2[8] { 0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1 };
     if (size >= 8 && std::memcmp (data, ole2, 8) == 0)
         return Format::cakewalk;
-    if (size >= 4 && std::memcmp (data, "RIFF", 4) == 0)
+    if (size >= 4 && (std::memcmp (data, "RIFF", 4) == 0 || std::memcmp (data, "RIF2", 4) == 0))
     {
         if (findBytes (data, std::min<std::size_t> (size, 512), "NUNDROOT", 8) != npos || ext == "cpr" || ext == "npr")
             return Format::cubase;
@@ -295,6 +405,8 @@ std::string Report::summary() const
         out << " " << version;
     out << ": " << tracks.size() << (tracks.size() == 1 ? " track" : " tracks") << ", " << noteCount()
         << (noteCount() == 1 ? " note" : " notes");
+    if (! media.empty())
+        out << ", " << media.size() << (media.size() == 1 ? " audio file" : " audio files") << " beside the project";
     if (format == Format::dawproject && dawproject.clipCount > 0)
         out << ", " << dawproject.clipCount << (dawproject.clipCount == 1 ? " clip" : " clips") << " ("
             << dawproject.audioCount << " audio)";
@@ -442,7 +554,9 @@ bool readCubase (const std::uint8_t* data, std::size_t size, Report& out, std::s
     out.format = Format::cubase;
     out.application = "Cubase";
 
-    if (size < 16 || std::memcmp (data, "RIFF", 4) != 0)
+    // Cubase 14 writes its 64-bit RIFF variant, "RIF2"; older versions wrote "RIFF". Both carry NUNDROOT.
+    const bool riff2 = std::memcmp (data, "RIF2", 4) == 0;
+    if (size < 16 || (std::memcmp (data, "RIFF", 4) != 0 && ! riff2))
     {
         error = "not a Cubase project: the file does not start with RIFF";
         return false;
@@ -455,10 +569,17 @@ bool readCubase (const std::uint8_t* data, std::size_t size, Report& out, std::s
         return false;
     }
 
-    // The version token is the one part of the tree whose meaning is public ("PAppVersion" then the text).
+    // The version token is the one part of the tree whose meaning is public ("PAppVersion" then the text). Only a run
+    // that starts with a digit is a version: the next chunk name follows it, which used to be reported as "ARCH".
     const auto versionAt = findBytes (data, size, "PAppVersion", 11);
     if (versionAt != npos)
-        out.version = printableRun (data, size, versionAt + 11, 32);
+    {
+        auto text = printableRun (data, size, versionAt + 11, 32);
+        const auto firstDigit = text.find_first_of ("0123456789");
+        text = firstDigit == npos ? std::string() : text.substr (firstDigit);
+        if (! text.empty() && text.find ('.') != npos)
+            out.version = text;
+    }
 
     for (int width : { 8, 4 })
     {
@@ -486,9 +607,51 @@ bool readCubase (const std::uint8_t* data, std::size_t size, Report& out, std::s
     else
     {
         out.findings.push_back ("this project stores its events in Cubase's own chunk tree, where this reader found no MIDI");
-        out.findings.push_back ("in Cubase choose File > Export > MIDI File, then File > Import > MIDI file here");
+        out.findings.push_back ("the audio, if the project has any, is in its Audio folder: those files are recovered below");
     }
     return true;
+}
+
+int findAudioBeside (const std::string& projectPath, Report& out)
+{
+    namespace fs = std::filesystem;
+    std::error_code ec;
+    const fs::path project (projectPath);
+    const auto folder = project.parent_path();
+    if (folder.empty() || ! fs::is_directory (folder, ec))
+        return 0;
+
+    // Cubase records into <project>/Audio; when there is no such folder the media sometimes sits beside the .cpr.
+    // The first folder that holds audio wins, so a project's takes are never listed twice.
+    const fs::path candidates[] { folder / "Audio", folder / "audio", folder };
+    for (const auto& candidate : candidates)
+    {
+        std::vector<fs::path> found;
+        for (fs::directory_iterator it (candidate, fs::directory_options::skip_permission_denied, ec), end;
+             ! ec && it != end; it.increment (ec))
+        {
+            std::error_code fileError;
+            const auto& path = it->path();
+            if (it->is_regular_file (fileError) && isAudioFile (path.string()))
+                found.push_back (path);
+        }
+        if (found.empty())
+            continue;
+
+        std::sort (found.begin(), found.end(), [] (const fs::path& a, const fs::path& b) {
+            return lowerAscii (a.filename().string()) < lowerAscii (b.filename().string());
+        });
+        for (const auto& path : found)
+        {
+            MediaFile media;
+            media.path = path.string();
+            media.name = path.filename().string();
+            media.seconds = audioSeconds (media.path);
+            out.media.push_back (std::move (media));
+        }
+        return (int) found.size();
+    }
+    return 0;
 }
 
 bool readCakewalkWrk (const std::uint8_t* data, std::size_t size, Report& out, std::string& error)
@@ -679,8 +842,111 @@ bool readFile (const std::string& path, Report& out, std::string& error)
         extension = path.substr (dot + 1);
     if (! read (bytes.data(), bytes.size(), extension, out, error))
         return false;
+    out.sourcePath = path;
     if (out.format == Format::dawproject)
         out.dawproject.sourcePath = path;
+
+    // Cubase, Nuendo and SONAR keep their audio beside the project, never inside it. When the container gave no notes,
+    // the recordings are what is left to recover: the files themselves, on their own audio tracks (their positions live
+    // in the same unreadable tree, so the arrangement of the clips is reported rather than invented).
+    const bool besideTheProject = out.format == Format::cubase || out.format == Format::cakewalk || out.format == Format::cakewalkWrk;
+    if (besideTheProject && ! out.hasNotes())
+    {
+        const auto files = findAudioBeside (path, out);
+        if (files > 0)
+        {
+            std::size_t measured = 0;
+            for (const auto& media : out.media)
+                measured += media.seconds > 0.0 ? 1 : 0;
+            out.findings.push_back ("audio: " + std::to_string (files) + (files == 1 ? " file" : " files")
+                                    + " from the project's audio folder (every file in it, old takes included),"
+                                    " each on its own audio track from bar 1");
+            if (measured < out.media.size())
+                out.findings.push_back (std::to_string (out.media.size() - measured)
+                                        + " of them have no readable length (only WAV and AIFF headers are read), so their clips are estimated");
+            out.findings.push_back ("Cubase does not store where the clips sit in a form this reader can read: the audio arrives whole, in file-name order");
+        }
+        else
+            out.findings.push_back ("no audio files were found beside the project (Cubase records into its Audio folder)");
+    }
+    return true;
+}
+
+// A project whose only recoverable content is its audio: one audio channel and one Playlist track per file, each clip
+// from bar 1. The channel holds the file (instrument = audioClip, samplePath), exactly as a DAWproject's audio clip
+// does, so the takes play and can be dragged where they belong.
+bool importMediaAsAudio (Song& song, Report& report, std::string& error)
+{
+    if (report.media.empty())
+    {
+        error = "no audio to import";
+        return false;
+    }
+
+    // A song always has a pattern to show (the Channel Rack and the Piano Roll both land on one); an audio-only
+    // project gets an empty one to hold that place rather than a song with none.
+    if (song.patterns.empty())
+    {
+        Pattern pattern;
+        pattern.name = "Imported";
+        song.patterns.push_back (std::move (pattern));
+    }
+
+    const auto bpm = song.bpm > 0.0 ? song.bpm : 130.0;
+    const auto ticksOfSeconds = [bpm] (double seconds)
+    {
+        return std::max<std::int64_t> (1, (std::int64_t) std::llround (seconds * bpm / 60.0 * (double) ppq));
+    };
+    auto uniqueName = [&song] (const std::string& wanted)
+    {
+        auto name = wanted;
+        for (int n = 2;; ++n)
+        {
+            bool used = false;
+            for (const auto& c : song.channels)
+                used = used || c.name == name;
+            if (! used)
+                return name;
+            name = wanted + " (" + std::to_string (n) + ")";
+        }
+    };
+
+    for (const auto& media : report.media)
+    {
+        ChannelDef channel;
+        channel.name = uniqueName (stemOf (media.name));
+        channel.instrument = InstrumentKind::audioClip;
+        channel.samplePath = media.path;
+        channel.volume = 1.0f;
+        song.channels.push_back (std::move (channel));
+        const auto channelIndex = (int) song.channels.size() - 1;
+
+        PlaylistTrack track;
+        track.name = song.channels[(std::size_t) channelIndex].name;
+        track.mode = PlaylistTrackMode::audio;
+        song.playlistTracks.push_back (std::move (track));
+        const auto trackIndex = (int) song.playlistTracks.size() - 1;
+
+        Clip placed;
+        placed.kind = ClipKind::audio;
+        placed.channel = channelIndex;
+        placed.track = trackIndex;
+        placed.start = 0;
+        placed.offset = 0;
+        // A length this reader cannot measure is estimated from the file size (16-bit 44.1 kHz stereo is the widest
+        // common case, so the guess errs long: a tail of silence, never a cut take).
+        std::error_code sizeError;
+        const auto bytes = std::filesystem::file_size (media.path, sizeError);
+        if (media.seconds > 0.0)
+            placed.length = ticksOfSeconds (media.seconds);
+        else if (! sizeError && bytes > 0)
+            placed.length = ticksOfSeconds ((double) bytes / 176400.0);
+        else
+            placed.length = ticksOfSeconds (8.0);
+        song.playlist.push_back (placed);
+    }
+
+    report.findings.push_back ("imported " + std::to_string (report.media.size()) + " audio file(s) on their own tracks, all starting at bar 1");
     return true;
 }
 
@@ -700,8 +966,12 @@ bool importInto (Song& song, Report& report, const midiimport::Options& options,
     }
     if (! report.hasNotes())
     {
-        error = "no notes could be recovered from this project:\n" + report.summary();
-        return false;
+        if (report.media.empty())
+        {
+            error = "no notes could be recovered from this project:\n" + report.summary();
+            return false;
+        }
+        return importMediaAsAudio (song, report, error);
     }
     return midiimport::importInto (song, report.midi, options, patternName, error);
 }

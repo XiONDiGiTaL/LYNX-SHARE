@@ -8,7 +8,9 @@
 //       ASCII ("PAppVersion", "Plugin UID" are literal tokens), the tree's length fields are not documented, so
 //       this reader validates a 64- or 32-bit length walk and otherwise falls back to a byte scan. Cubase keeps its
 //       events in that proprietary tree; anything it embeds as a standard MIDI file is recovered exactly, and the
-//       rest is reported instead of guessed. Audio always lives beside the .cpr, never inside it.
+//       rest is reported instead of guessed. Audio always lives beside the .cpr, never inside it, and its clip
+//       positions are part of the same unreadable tree — so the files themselves are recovered: the project's Audio
+//       folder, on their own audio tracks from bar 1 (the alternative is losing the recordings entirely).
 //   .cwp / .cwb (Cakewalk, SONAR, BandLab): no public specification exists (the format is an OLE2 container in
 //       practice). Only embedded standard MIDI is recovered; notes are otherwise reported as not readable, which is
 //       the honest result rather than a silent half-import.
@@ -56,20 +58,35 @@ struct Track
     bool operator== (const Track&) const = default;
 };
 
+// An audio file that lives beside a project instead of inside it (Cubase, SONAR). Its position in the arrangement is
+// not recoverable from those containers, so the import puts each one on its own audio track from bar 1.
+struct MediaFile
+{
+    std::string path;      // absolute path on disk
+    std::string name;      // file name only (the channel and track take their name from it)
+    double seconds = 0.0;  // 0 when the header did not say (only WAV / AIFF are read)
+    bool operator== (const MediaFile&) const = default;
+};
+
 struct Report
 {
     Format format = Format::unknown;
     std::string application; // "Cubase", "Cakewalk", "MIDI"
     std::string version;     // what the container says, when it says it
+    std::string sourcePath;  // the file that was read (readFile), for the folders beside it
     std::vector<Track> tracks;
     std::vector<std::string> plugins;  // Cubase plugin tokens found in the container (not converted)
     std::vector<std::string> findings; // what was recovered and what was not; shown to the user
+    std::vector<MediaFile> media;      // audio found beside the project (see findAudioBeside)
     midiimport::ParsedMidi midi;
     dawproject::Project dawproject; // Format::dawproject: the full arrangement
 
     int noteCount() const noexcept;
     bool hasNotes() const noexcept { return noteCount() > 0; }
-    bool hasImportableContent() const noexcept { return hasNotes() || (format == Format::dawproject && ! dawproject.tracks.empty()); }
+    bool hasImportableContent() const noexcept
+    {
+        return hasNotes() || ! media.empty() || (format == Format::dawproject && ! dawproject.tracks.empty());
+    }
     std::string summary() const; // one line: format, tracks, notes, then one line per finding
 };
 
@@ -83,10 +100,11 @@ Format detect (const std::uint8_t* data, std::size_t size, const std::string& ex
 bool read (const std::uint8_t* data, std::size_t size, const std::string& extension, Report& out, std::string& error);
 bool readFile (const std::string& path, Report& out, std::string& error);
 
-// The recovered tracks as channels and a new pattern. False (and `error`) when the report has no notes. For a
-// DAWproject the whole arrangement is used instead (patterns, Playlist clips and audio-clip channels), and the findings
-// the import itself produces (extracted or missing audio, disabled tracks, clips it left out) are written back to the
-// report, so `report.findings` and `report.summary()` describe the import and not only the read.
+// The recovered tracks as channels and a new pattern. False (and `error`) when the report has no notes and no audio.
+// For a DAWproject the whole arrangement is used instead (patterns, Playlist clips and audio-clip channels), and the
+// findings the import itself produces (extracted or missing audio, disabled tracks, clips it left out) are written
+// back to the report, so `report.findings` and `report.summary()` describe the import and not only the read. When a
+// project only has audio (no recoverable notes), each file found beside it becomes an audio channel on its own track.
 bool importInto (Song& song, Report& report, const midiimport::Options& options, const std::string& patternName, std::string& error);
 
 // The same, with a folder for the audio a DAWproject embeds (`extractMedia`). `mediaDirectory` is ignored by the
@@ -98,6 +116,10 @@ bool importInto (Song& song, Report& report, const midiimport::Options& options,
 // A standard MIDI file (format 0 / 1 / 2) into the MIDI importer's own model. False when there is no valid MThd.
 bool parseStandardMidi (const std::uint8_t* data, std::size_t size, midiimport::ParsedMidi& out, std::string* error = nullptr);
 bool readCubase (const std::uint8_t* data, std::size_t size, Report& out, std::string& error);
+
+// The audio files beside a project file (its "Audio" folder, else the folder the project is in), sorted by name, into
+// `out.media`. Returns how many were added. Used by readFile for the containers that keep their media on disk.
+int findAudioBeside (const std::string& projectPath, Report& out);
 bool readCakewalkWrk (const std::uint8_t* data, std::size_t size, Report& out, std::string& error);
 bool readCakewalk (const std::uint8_t* data, std::size_t size, Report& out, std::string& error);
 } // namespace lynx::foreign

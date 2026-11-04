@@ -200,6 +200,82 @@ TEST (foreign_cubase_project)
     CHECK (! error.empty());
 }
 
+TEST (foreign_cubase_audio_beside_the_project)
+{
+    using namespace lynx::foreign;
+    namespace fs = std::filesystem;
+
+    // A Cubase project keeps its audio in the Audio folder beside the .cpr, and its clip positions in the chunk tree
+    // this reader cannot decode. The files themselves are the recovery: each one on its own audio track.
+    const auto base = fs::temp_directory_path() / "lynx-foreign-audio";
+    std::error_code ec;
+    fs::remove_all (base, ec);
+    fs::create_directories (base / "Audio", ec);
+
+    const auto makeWav = [] (std::uint32_t frames)
+    {
+        std::vector<std::uint8_t> out;
+        const auto put32 = [&out] (std::uint32_t v) { for (int i = 0; i < 4; ++i) out.push_back ((std::uint8_t) (v >> (8 * i))); };
+        const auto put16 = [&out] (std::uint16_t v) { out.push_back ((std::uint8_t) (v & 0xff)); out.push_back ((std::uint8_t) (v >> 8)); };
+        const auto dataBytes = frames * 4; // 16-bit stereo
+        out.insert (out.end(), { 'R', 'I', 'F', 'F' }); put32 (36 + dataBytes); out.insert (out.end(), { 'W', 'A', 'V', 'E' });
+        out.insert (out.end(), { 'f', 'm', 't', ' ' }); put32 (16); put16 (1); put16 (2); put32 (44100); put32 (44100 * 4); put16 (4); put16 (16);
+        out.insert (out.end(), { 'd', 'a', 't', 'a' }); put32 (dataBytes);
+        out.resize (out.size() + dataBytes);
+        return out;
+    };
+    const auto write = [] (const fs::path& path, const std::vector<std::uint8_t>& bytes) {
+        std::ofstream out (path, std::ios::binary);
+        out.write (reinterpret_cast<const char*> (bytes.data()), (std::streamsize) bytes.size());
+    };
+
+    const auto cpr = foreigntest::makeCpr ({}, "14.0.31");
+    write (base / "Take.cpr", cpr);
+    write (base / "Audio" / "b-voice.wav", makeWav (44100));   // 1 second
+    write (base / "Audio" / "a-music.wav", makeWav (88200));   // 2 seconds
+
+    Report report;
+    std::string error;
+    CHECK (readFile ((base / "Take.cpr").string(), report, error));
+    CHECK (error.empty());
+    CHECK (report.version == "14.0.31"); // a version, not the next chunk name ("ARCH" used to win)
+    CHECK (! report.hasNotes());
+    CHECK (report.media.size() == 2);
+    CHECK (report.media[0].name == "a-music.wav" && report.media[1].name == "b-voice.wav"); // file-name order
+    CHECK (std::abs (report.media[0].seconds - 2.0) < 0.01);
+    CHECK (std::abs (report.media[1].seconds - 1.0) < 0.01);
+    CHECK (report.hasImportableContent());
+    CHECK (report.summary().find ("2 audio files") != std::string::npos);
+
+    lynx::Song song;
+    lynx::midiimport::Options options;
+    CHECK (importInto (song, report, options, "Imported", error));
+    CHECK (error.empty());
+    CHECK (song.channels.size() == 2);
+    CHECK (song.patterns.size() == 1 && song.patterns[0].notes.empty()); // a song always has a pattern to show
+    CHECK (song.channels[0].instrument == lynx::InstrumentKind::audioClip);
+    CHECK (song.channels[0].samplePath == (base / "Audio" / "a-music.wav").string());
+    CHECK (song.channels[0].name == "a-music");
+    CHECK (song.playlistTracks.size() == 2 && song.playlistTracks[0].mode == lynx::PlaylistTrackMode::audio);
+    CHECK (song.playlist.size() == 2);
+    CHECK (song.playlist[0].kind == lynx::ClipKind::audio && song.playlist[0].channel == 0 && song.playlist[0].track == 0);
+    CHECK (song.playlist[0].start == 0);
+    const auto expected = (std::int64_t) std::llround (2.0 * song.bpm / 60.0 * (double) lynx::ppq);
+    CHECK (song.playlist[0].length == expected);
+
+    // a project with neither notes nor audio still refuses, and says why
+    fs::remove_all (base / "Audio", ec);
+    Report bare;
+    CHECK (readFile ((base / "Take.cpr").string(), bare, error));
+    CHECK (bare.media.empty() && ! bare.hasImportableContent());
+    lynx::Song none;
+    std::string reason;
+    CHECK (! importInto (none, bare, options, "Nothing", reason));
+    CHECK (reason.find ("no notes") != std::string::npos);
+
+    fs::remove_all (base, ec);
+}
+
 TEST (foreign_cakewalk_projects)
 {
     using namespace lynx::foreign;
