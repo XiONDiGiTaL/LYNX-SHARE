@@ -78,3 +78,17 @@ jobs:
           "${run[@]}" "$bin" --selftest "$PWD/selftest.txt" "$PWD/selftest-demo.lynx" || true
           cat selftest.txt
           grep -q '^result=OK' selftest.txt
+
+  # The embedded tables must be exactly the bytes tools/make_i18n.py writes. The generator compresses with
+  # tools/deflate_det.py (plain Python) rather than zlib.compress(), whose stream depends on the zlib build linked
+  # into Python, so regenerating on any machine — this runner, a Windows checkout — must leave the headers untouched.
+  i18n:
+    name: i18n tables are reproducible
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - name: Regenerate and compare
+        shell: bash
+        run: |
+          python3 tools/make_i18n.py
+          git diff --exit-code -- src/ui/i18n src/ui/I18nData.h

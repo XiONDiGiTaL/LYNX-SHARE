@@ -1,9 +1,17 @@
 # Embeds the translation tables in the executable.
 # Usage: python3 tools/make_i18n.py   (from the repository root)
 # Reads every resources/i18n/<id>.txt and writes src/ui/i18n/<id>.h (the table zlib-compressed: the plain
-# tables are ~390 KB each, compressed ~120 KB; one header per language so a fix to one table changes one file)
+# tables are ~490 KB each, compressed ~170 KB; one header per language so a fix to one table changes one file)
 # plus src/ui/I18nData.h (the list). Unpacked with lynx::inflateZlib when a language is chosen.
-import pathlib, zlib
+#
+# The compression is tools/deflate_det.py, not zlib.compress(): only the input decides the bytes it emits, so the
+# headers come out identical on every machine. zlib's own stream varies with the zlib build linked into Python
+# (1.2.x and 1.3 pick different matches at level 9), which made every header differ after a regeneration on another
+# machine even though the text was the same.
+import pathlib, sys, zlib
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import deflate_det  # noqa: E402
 
 root = pathlib.Path(__file__).resolve().parent.parent
 # fixed order: the order of the Language menu is set in src/ui/I18n.cpp, this one only names the arrays
@@ -29,7 +37,9 @@ for lang in ids:
     # embed the text with LF line breaks whatever the checkout: a Windows working copy (core.autocrlf) has CRLF, and the
     # headers must come out byte-identical to the ones CI generates from an LF checkout
     data = (root / f"resources/i18n/{lang}.txt").read_bytes().replace(b"\r\n", b"\n")
-    packed = zlib.compress(data, 9)
+    packed = deflate_det.compress(data)
+    if zlib.decompress(packed) != data: # zlib only reads here: the embedded bytes are deflate_det's
+        raise SystemExit(f"deflate_det.compress produced a stream that does not decode {lang}.txt")
     name = "t_" + lang.replace("-", "_")
     names.append((lang, name, len(packed), len(data)))
     part = ["#pragma once", "",

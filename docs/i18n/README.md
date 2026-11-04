@@ -53,6 +53,10 @@ python3 tools/i18n_tool.py merge de /tmp/de    # merges them into resources/i18n
 python3 tools/make_i18n.py                     # embeds the tables (src/ui/i18n/<id>.h)
 ```
 
+The generator compresses with its own deterministic encoder (`tools/deflate_det.py`) instead of `zlib.compress()`,
+whose stream changes with the zlib build: the same tables always produce the same headers, on any machine. CI
+regenerates them and fails if they differ.
+
 Try it: `LYNX --lang de` starts in that language for one run (Settings keeps the saved one), and
 `LYNX --lang de --snapshot shots/de` writes off-screen pictures of the main windows to check that nothing is cut.
 
