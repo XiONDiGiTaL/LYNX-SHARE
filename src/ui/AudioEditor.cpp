@@ -16,13 +16,17 @@
 #include "core/AudioEditTools.h"
 #include "core/EdisonScript.h"
 #include "core/Instruments.h"
+#include "core/MeterBallistics.h"
 #include "core/NewtoneFx.h"
+#include "core/NoteEdit.h"
 #include "core/WaveAnalysis.h"
 #include "core/ValueMath.h"
 #include "engine/SampleLibrary.h"
 #include "engine/Text.h"
 #include "platform/Paths.h"
 #include "ui/HintBar.h"
+#include "ui/MixerComponent.h"
+#include "ui/QuickPick.h"
 #include "ui/ValueControl.h"
 #include "ui/I18n.h"
 #include "ui/Icons.h"
@@ -60,8 +64,14 @@ bool readAudioFile (const juce::File& file, ae::Audio& out)
     return true;
 }
 
-// the clean clip look (docs/analise/UI_STUDY_playlist_clips.md): one light filled shape in a tint of the audio colour
-juce::Colour waveColour() { return theme::colour::audioClip.interpolatedWith (juce::Colours::white, 0.7f); }
+// The wave is a tint of the theme's primary colour (Options › Theme), so the editor follows the accent the user picked
+// instead of a fixed blue: lightened on the dark themes, darkened on a light one, and always keeping the accent's hue.
+juce::Colour waveColour()
+{
+    const auto accent = theme::colour::accent;
+    const auto lightBackground = theme::colour::bg0.getPerceivedBrightness() > 0.5f;
+    return accent.interpolatedWith (lightBackground ? juce::Colours::black : juce::Colours::white, lightBackground ? 0.28f : 0.42f);
+}
 
 enum class TimeFormat
 {
@@ -89,12 +99,13 @@ juce::String formatSeconds (double s)
     return juce::String (negative ? "-" : "") + juce::String (minutes) + ":" + juce::String (rest, 3).paddedLeft ('0', 6);
 }
 
-// Spectrogram colours (LYNX's own map): the canvas, a deep red, the accent, amber, then white for the loudest.
+// Spectrogram colours (LYNX's own map): the canvas, a deep shade of the accent, the accent, amber, then white for the
+// loudest. The stops are read on every call (not cached in a static) so a theme change recolours the spectrogram.
 juce::Colour spectrumColour (float db)
 {
     const auto t = juce::jlimit (0.0f, 1.0f, (db + 96.0f) / 96.0f);
-    static const juce::Colour stops[] = { theme::colour::bg0, juce::Colour (0xff3a1016), theme::colour::accent, theme::colour::warning,
-                                          juce::Colour (0xfffff4dc) };
+    const juce::Colour stops[] = { theme::colour::bg0, theme::colour::accent.withMultipliedBrightness (0.3f),
+                                   theme::colour::accent, theme::colour::warning, juce::Colour (0xfffff4dc) };
     static const float at[] = { 0.0f, 0.35f, 0.62f, 0.85f, 1.0f };
     for (int i = 1; i < 5; ++i)
         if (t <= at[i])
@@ -535,6 +546,57 @@ public:
         sendButton.setColour (juce::TextButton::buttonColourId, theme::colour::accentMuted);
         sendButton.onClick = [this] { sendMenu().showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&sendButton)); };
 
+        // The channel strip (an editor opened from a channel): the sample's channel and the controls that decide how it
+        // is heard - Mute, Solo, the insert's effect slots, the pan and the volume, with a level meter - driving that
+        // channel, as the settings window does.
+        if (source.kind == Source::Kind::channel)
+        {
+            for (auto* b : { &stripMute, &stripSolo })
+            {
+                b->setClickingTogglesState (false);
+                addAndMakeVisible (*b);
+            }
+            stripMute.setButtonText (tr ("Mute"));
+            stripSolo.setButtonText (tr ("Solo"));
+            stripMute.onClick = [this] { toggleChannelMute(); };
+            stripSolo.onClick = [this] { toggleChannelSolo(); };
+
+            stripPan.setSliderStyle (juce::Slider::LinearHorizontal);
+            stripPan.setTextBoxStyle (juce::Slider::NoTextBox, false, 0, 0);
+            stripPan.setRange (-1.0, 1.0, 0.001);
+            stripPan.setDoubleClickReturnValue (true, 0.0);
+            stripPan.setMouseClickGrabsKeyboardFocus (false);
+            stripPan.setTooltip (tr ("Pan"));
+            stripPan.onValueChange = [this] {
+                const auto i = channelIndex();
+                const auto v = (float) stripPan.getValue();
+                if (i < 0 || std::abs (v - engine.getSong().channels[(std::size_t) i].pan) < 1.0e-4f)
+                    return;
+                engine.editSong ([i, v] (Song& s) { s.channels[(std::size_t) i].pan = v; });
+                repaint (stripArea);
+            };
+            addAndMakeVisible (stripPan);
+
+            // the channel's volume: the settings window's VOL knob (0..100%, the channel's note level)
+            stripVolume.setRange (0.0, 1.0, 0.001);
+            stripVolume.setDoubleClickReturnValue (true, 0.78);
+            stripVolume.setMouseClickGrabsKeyboardFocus (false);
+            stripVolume.setWantsKeyboardFocus (false);
+            stripVolume.setTooltip (tr ("Volume"));
+            stripVolume.textFromValueFunction = [] (double v) { return ui::percentSpec ({}, 0.78).text (v); };
+            stripVolume.onValueChange = [this] {
+                const auto i = channelIndex();
+                const auto v = (float) stripVolume.getValue();
+                if (i < 0 || std::abs (v - engine.getSong().channels[(std::size_t) i].volume) < 1.0e-4f)
+                    return;
+                engine.editSong ([i, v] (Song& s) { s.channels[(std::size_t) i].volume = juce::jlimit (0.0f, 1.0f, v); });
+                repaint (stripArea);
+            };
+            addAndMakeVisible (stripVolume);
+            refreshChannelStrip();
+            refreshStripEffects(); // (the slots and the buttons' tooltips are read here, then every 10th timer frame)
+        }
+
         // quick tools (the second row)
         struct Quick
         {
@@ -649,6 +711,12 @@ public:
 
     juce::PopupMenu mainMenu();
     void setEnvModeForSnapshot (int mode) { setEnvMode ((EnvMode) juce::jlimit (0, 3, mode)); }
+    // the level the strip's meter shows in a --snapshot picture (the timer does not run off-screen)
+    void setStripLevelForSnapshot (float peak)
+    {
+        stripLevel.tick (peak);
+        repaint (stripMeter.expanded (1));
+    }
 
     // --- layout and painting ---------------------------------------------------------------------------------
     void resized() override
@@ -743,6 +811,17 @@ public:
         overviewArea = area.removeFromBottom (18).reduced (6, 2);
         area.removeFromBottom (2);
         area = area.reduced (6, 0);
+
+        // the channel strip, when the editor was opened from a channel
+        if (source.kind == Source::Kind::channel)
+        {
+            stripArea = area.removeFromLeft (juce::jlimit (104, 156, area.getWidth() / 4));
+            area.removeFromLeft (8);
+            layoutChannelStrip();
+        }
+        else
+            stripArea = {};
+
         levelArea = area.removeFromLeft (34);
         rulerArea = area.removeFromTop (24);
         rulerArea.setX (area.getX());
@@ -759,6 +838,7 @@ public:
         g.setColour (colour::border);
         g.drawHorizontalLine (36, 0.0f, (float) getWidth());
 
+        paintChannelStrip (g);
         paintRuler (g);
         paintLevels (g);
         if (spectrumView)
@@ -775,6 +855,19 @@ public:
     {
         grabKeyboardFocus();
         drag = Drag::none;
+
+        // the channel strip: an effect slot (or the caption above the slots) opens the insert's effects window there
+        if (stripArea.contains (e.getPosition()))
+        {
+            if (const auto slot = stripSlotAt (e.getPosition()); e.mods.isPopupMenu() && slot >= 0)
+                showStripSlotMenu (slot);
+            else if (slot >= 0)
+                openChannelEffects (slot);
+            else if (stripFxCaption.contains (e.getPosition()))
+                openChannelEffects (-1);
+            return;
+        }
+
         if (doc.audio.empty())
         {
             if (e.mods.isPopupMenu())
@@ -913,6 +1006,32 @@ public:
             }
         }
         drag = Drag::none;
+    }
+
+    void mouseMove (const juce::MouseEvent& e) override
+    {
+        if (stripArea.isEmpty())
+            return;
+        const auto p = e.getPosition();
+        const auto slot = stripSlotAt (p);
+        const auto fx = stripFxCaption.contains (p);
+        if (slot != stripHoverSlot || fx != stripHoverFx)
+        {
+            stripHoverSlot = slot;
+            stripHoverFx = fx;
+            repaint (stripArea);
+        }
+        setMouseCursor (slot >= 0 || fx ? juce::MouseCursor::PointingHandCursor : juce::MouseCursor::NormalCursor);
+    }
+
+    void mouseExit (const juce::MouseEvent&) override
+    {
+        if (stripHoverSlot >= 0 || stripHoverFx)
+        {
+            stripHoverSlot = -1;
+            stripHoverFx = false;
+            repaint (stripArea);
+        }
     }
 
     void mouseDoubleClick (const juce::MouseEvent& e) override
@@ -1200,11 +1319,15 @@ private:
         return true;
     }
 
+    // Every channel is its own framed lane (the reference look): a small gap from the canvas edge and from the lane
+    // above, so a stereo file reads as two stacked waveforms rather than one split panel.
     juce::Rectangle<float> laneBounds (int lane) const
     {
         const auto lanes = juce::jmax (1, doc.audio.numChannels());
         const auto h = (float) waveArea.getHeight() / (float) lanes;
-        return { (float) waveArea.getX(), (float) waveArea.getY() + h * (float) lane, (float) waveArea.getWidth(), h };
+        const juce::Rectangle<float> row { (float) waveArea.getX(), (float) waveArea.getY() + h * (float) lane,
+                                           (float) waveArea.getWidth(), h };
+        return row.reduced (3.0f, juce::jmax (2.0f, h * 0.012f));
     }
 
     void paintWave (juce::Graphics& g)
@@ -1225,26 +1348,37 @@ private:
 
         juce::Graphics::ScopedSaveState save (g);
         g.reduceClipRegion (waveArea);
-        paintSelectionAndRegions (g);
 
         const auto lanes = doc.audio.numChannels();
+
+        // the lanes as framed panels, their frames tinted with the theme's primary colour
+        for (int lane = 0; lane < lanes; ++lane)
+        {
+            const auto box = laneBounds (lane);
+            g.setColour (colour::bg1);
+            g.fillRoundedRectangle (box, radius::sm);
+            g.setColour (colour::accent.withAlpha (0.35f));
+            g.drawRoundedRectangle (box.reduced (0.5f), radius::sm, 1.0f);
+        }
+
+        paintSelectionAndRegions (g);
+
         for (int lane = 0; lane < lanes; ++lane)
         {
             const auto r = laneBounds (lane);
             const auto centre = r.getCentreY();
             const auto half = r.getHeight() * 0.5f - 2.0f;
 
-            // level guides: centre line and -6 dB
+            // the wave and its guides stay inside the lane's frame (never in the gap between the lanes)
+            juce::Graphics::ScopedSaveState laneSave (g);
+            g.reduceClipRegion (r.toNearestInt());
+
+            // level guides: the centre line and the half-scale lines the labels mark
             g.setColour (colour::gridBeat);
             g.drawHorizontalLine ((int) (centre - half * 0.5f), r.getX(), r.getRight());
             g.drawHorizontalLine ((int) (centre + half * 0.5f), r.getX(), r.getRight());
             g.setColour (colour::gridBar);
             g.drawHorizontalLine ((int) centre, r.getX(), r.getRight());
-            if (lane > 0)
-            {
-                g.setColour (colour::border);
-                g.drawHorizontalLine ((int) r.getY(), r.getX(), r.getRight());
-            }
 
             const auto width = waveArea.getWidth();
             if (fpp < 1.0)
@@ -1267,16 +1401,34 @@ private:
                 continue;
             }
 
-            // one filled shape: the top edge (maxima) left to right, the bottom edge (minima) back
-            std::vector<float> tops ((std::size_t) width), bottoms ((std::size_t) width);
+            // One filled shape, mirrored around the centre line: the peak of the column on both sides. Filling between the
+            // raw minima and maxima instead made a short clip read as a chain of hollow lenses, because a column that
+            // holds only a fraction of a cycle collapses near its crests. The peak of a column and its two neighbours
+            // keeps the body solid: a column that lands between two crests of a low note would otherwise stripe the wave.
+            auto peakAt = [&] (int x) {
+                const auto from = viewStart + x * fpp;
+                float lo = 0.0f, hi = 0.0f;
+                if (! columnRange (lane, from, from + fpp, lo, hi))
+                    return -1.0f; // outside the audio
+                return juce::jlimit (0.0f, 1.0f, juce::jmax (std::abs (lo), std::abs (hi)));
+            };
+            std::vector<float> amps ((std::size_t) width), tops ((std::size_t) width), bottoms ((std::size_t) width);
             std::vector<char> valid ((std::size_t) width);
             for (int x = 0; x < width; ++x)
             {
-                const auto from = viewStart + x * fpp;
-                float lo = 0.0f, hi = 0.0f;
-                valid[(std::size_t) x] = columnRange (lane, from, from + fpp, lo, hi) ? 1 : 0;
-                tops[(std::size_t) x] = centre - juce::jlimit (-1.0f, 1.0f, hi) * half;
-                bottoms[(std::size_t) x] = centre - juce::jlimit (-1.0f, 1.0f, lo) * half;
+                amps[(std::size_t) x] = peakAt (x);
+                valid[(std::size_t) x] = amps[(std::size_t) x] >= 0.0f ? 1 : 0;
+            }
+            for (int x = 0; x < width; ++x)
+            {
+                auto amp = amps[(std::size_t) x];
+                for (int d = 1; d <= 2; ++d)
+                {
+                    if (x - d >= 0) amp = juce::jmax (amp, amps[(std::size_t) (x - d)]);
+                    if (x + d < width) amp = juce::jmax (amp, amps[(std::size_t) (x + d)]);
+                }
+                tops[(std::size_t) x] = centre - juce::jmax (0.0f, amp) * half;
+                bottoms[(std::size_t) x] = centre + juce::jmax (0.0f, amp) * half;
                 if (bottoms[(std::size_t) x] - tops[(std::size_t) x] < 1.0f) // silence still shows as a hairline
                 {
                     const auto mid = (bottoms[(std::size_t) x] + tops[(std::size_t) x]) * 0.5f;
@@ -1340,8 +1492,10 @@ private:
 
         const auto columns = juce::jmax (1, waveArea.getWidth() / 2);
         const auto height = juce::jmax (1, waveArea.getHeight());
+        // the accent is part of the key: after a theme change the map is rebuilt in the new colours
         const auto key = juce::String (docVersion) + "|" + juce::String (viewStart) + "|" + juce::String (fpp) + "|" + juce::String (columns) + "x"
-                         + juce::String (height) + "|" + juce::String (fftSize) + (logFrequency ? "l" : "n");
+                         + juce::String (height) + "|" + juce::String (fftSize) + (logFrequency ? "l" : "n") + "|"
+                         + colour::accent.toString();
         if (key != spectrumKey)
         {
             const auto from = (std::int64_t) viewStart;
@@ -1404,20 +1558,28 @@ private:
             }
             return;
         }
+        // The lane scale in linear amplitude, as the lane frames read: 1.0 / 0.5 / 0.0 / -0.5 / -1.0, with the channel's
+        // letter in the narrow strip to their left (a mono file keeps the strip empty).
         for (int lane = 0; lane < doc.audio.numChannels(); ++lane)
         {
             const auto r = laneBounds (lane);
-            const auto half = r.getHeight() * 0.5f - 2.0f;
+            const auto half = r.getHeight() * 0.5f - 8.0f; // the 1.0 / -1.0 labels stay inside the lane's frame
             auto label = [&] (float level, const juce::String& text) {
                 const auto y = r.getCentreY() - level * half;
-                g.drawText (text, juce::Rectangle<float> ((float) levelArea.getX(), y - 6.0f, 30.0f, 12.0f), juce::Justification::centredRight);
+                g.drawText (text, juce::Rectangle<float> ((float) levelArea.getX() + 12.0f, y - 6.0f, 22.0f, 12.0f),
+                            juce::Justification::centredRight);
             };
             if (r.getHeight() > 70.0f)
             {
-                label (0.5f, "-6");
-                label (-0.5f, "-6");
+                label (1.0f, "1.0");
+                label (0.5f, "0.5");
+                label (-0.5f, "-0.5");
+                label (-1.0f, "-1.0");
             }
-            label (0.0f, doc.audio.numChannels() > 1 ? (lane == 0 ? "L" : "R") : "0");
+            label (0.0f, "0.0");
+            if (doc.audio.numChannels() > 1)
+                g.drawText (lane == 0 ? "L" : "R", juce::Rectangle<float> ((float) levelArea.getX(), r.getCentreY() - 6.0f, 11.0f, 12.0f),
+                            juce::Justification::centredLeft);
         }
     }
 
@@ -2947,6 +3109,8 @@ private:
 
     void timerCallback() override
     {
+        if (! stripArea.isEmpty())
+            refreshChannelStrip();
         if (recState != RecState::idle)
         {
             drainRecording();
@@ -3339,7 +3503,19 @@ private:
     bool statusIsError = false;
     std::unique_ptr<juce::FileChooser> chooser;
 
-    juce::Rectangle<int> rulerArea, waveArea, levelArea, overviewArea, infoArea;
+    juce::Rectangle<int> rulerArea, waveArea, levelArea, overviewArea, infoArea, stripArea;
+    // the channel strip: the channel's name, its switches, the insert's effect slots (all painted) and the pan and
+    // volume controls
+    static constexpr int stripPad = 8, stripNameHeight = 20, stripRowHeight = 24, stripSlotHeight = 18;
+    juce::TextButton stripMute { "Mute" }, stripSolo { "Solo" };
+    juce::Slider stripPan { juce::Slider::LinearHorizontal, juce::Slider::NoTextBox };
+    juce::Slider stripVolume { juce::Slider::RotaryHorizontalVerticalDrag, juce::Slider::NoTextBox };
+    juce::Rectangle<int> stripFxCaption, stripSlots, stripPanCaption, stripPanValue, stripVolCaption, stripVolValue, stripMeter;
+    lynx::meters::PeakHold stripLevel;
+    int stripHoverSlot = -1, stripFxTicks = 0;
+    float stripShownLevel = 0.0f, stripShownPeak = 0.0f;
+    bool stripHoverFx = false;
+    juce::String fxSignature, stripShownName, stripShownPan, stripShownVol;
     IconButton menuButton { "menu", Icon::panelMenu }, undoButton { "undo", Icon::undo }, redoButton { "redo", Icon::redo },
         historyButton { "history", Icon::chevronDown }, recordButton { "record", Icon::record }, recordMenuButton { "recordMenu", Icon::chevronDown },
         playButton { "play", Icon::play }, stopButton { "stop", Icon::stop }, snapButton { "snap", Icon::magnet }, fitButton { "fit", Icon::zoom },
@@ -3356,6 +3532,430 @@ private:
         ui::setHint (volumeKnob, text + "  " + tr ("[LMB] drag  [Wheel] step  [2xLMB] 100%  [RMB] type a value"), true);
     }
 
+    // --- the channel strip (the editor opened from a channel) -------------------------------------------------
+    int channelIndex() const
+    {
+        const auto& channels = engine.getSong().channels;
+        return source.kind == Source::Kind::channel && juce::isPositiveAndBelow (source.index, (int) channels.size()) ? source.index : -1;
+    }
+
+    const ChannelDef* channel() const
+    {
+        const auto i = channelIndex();
+        return i < 0 ? nullptr : &engine.getSong().channels[(std::size_t) i];
+    }
+
+    // FL's channel solo: this channel alone is heard; the channels with "Lock active/mute state" keep theirs
+    bool channelSoloed() const
+    {
+        const auto i = channelIndex();
+        if (i < 0)
+            return false;
+        const auto& channels = engine.getSong().channels;
+        if (channels[(std::size_t) i].muted)
+            return false;
+        for (int c = 0; c < (int) channels.size(); ++c)
+            if (c != i && ! channels[(std::size_t) c].soloLock && ! channels[(std::size_t) c].muted)
+                return false;
+        return channels.size() > 1;
+    }
+
+    // the insert the channel plays through (the one Effects opens); Master when it is not routed anywhere
+    int insertTrack() const
+    {
+        const auto* c = channel();
+        if (c == nullptr)
+            return -1;
+        const auto track = c->mixerTrack;
+        return juce::isPositiveAndBelow (track, (int) engine.getSong().mixer.size()) ? track : 0;
+    }
+
+    juce::String insertNameForTrack (int track) const
+    {
+        const auto& mixer = engine.getSong().mixer;
+        if (! juce::isPositiveAndBelow (track, (int) mixer.size()))
+            return tr ("Master");
+        const auto name = juce::String::fromUTF8 (mixer[(std::size_t) track].name.c_str()).trim();
+        if (name.isNotEmpty())
+            return name;
+        return track == 0 ? tr ("Master") : tr ("Insert {0}", { juce::String (track) });
+    }
+
+    const std::vector<EffectSlot>* insertEffects() const
+    {
+        const auto track = insertTrack();
+        return juce::isPositiveAndBelow (track, (int) engine.getSong().mixer.size()) ? &engine.getSong().mixer[(std::size_t) track].effects
+                                                                                  : nullptr;
+    }
+
+    int stripSlotRows() const
+    {
+        return stripSlots.isEmpty() ? 0 : juce::jlimit (0, maxEffectSlots, stripSlots.getHeight() / stripSlotHeight);
+    }
+
+    juce::Rectangle<int> stripSlotRow (int slot) const
+    {
+        return stripSlots.withHeight (stripSlotHeight).translated (0, slot * stripSlotHeight);
+    }
+
+    int stripSlotAt (juce::Point<int> p) const
+    {
+        const auto rows = stripSlotRows();
+        for (int i = 0; i < rows; ++i)
+            if (stripSlotRow (i).contains (p))
+                return i;
+        return -1;
+    }
+
+    void layoutChannelStrip()
+    {
+        auto r = stripArea.reduced (stripPad, 6);
+        r.removeFromTop (stripNameHeight + 6); // the channel's name (painted)
+        auto row = r.removeFromTop (stripRowHeight);
+        const auto half = juce::jmax (28, (row.getWidth() - 4) / 2);
+        stripMute.setBounds (row.removeFromLeft (half));
+        row.removeFromLeft (4);
+        stripSolo.setBounds (row.removeFromLeft (half));
+        r.removeFromTop (6);
+
+        // the bottom controls are measured first, so the slot list takes the room they leave (and sits right above
+        // them: a short list never leaves a hole in the middle of the strip)
+        const auto knob = juce::jlimit (22, 40, r.getWidth() - 8);
+        const auto volHeight = r.getHeight() >= 240 ? 13 + knob + 2 + 14 + 6 : 0;
+        const auto panHeight = r.getHeight() >= volHeight + 110 ? 13 + 20 + 12 + 6 : 0;
+
+        stripFxCaption = r.removeFromTop (juce::jmin (14, juce::jmax (0, r.getHeight())));
+        r.removeFromTop (juce::jmin (2, juce::jmax (0, r.getHeight())));
+        const auto rows = juce::jlimit (0, maxEffectSlots, juce::jmax (0, r.getHeight() - volHeight - panHeight) / stripSlotHeight);
+        stripSlots = r.removeFromTop (rows * stripSlotHeight);
+
+        if (panHeight > 0)
+        {
+            stripPanCaption = r.removeFromTop (12);
+            stripPan.setBounds (r.removeFromTop (20).withTrimmedLeft (9).withTrimmedRight (9));
+            stripPanValue = r.removeFromTop (13);
+            r.removeFromTop (juce::jmin (6, juce::jmax (0, r.getHeight())));
+        }
+        else
+        {
+            stripPanValue = stripPanCaption = {};
+            stripPan.setBounds ({});
+        }
+
+        if (volHeight > 0)
+        {
+            auto captionRow = r.removeFromTop (14);
+            stripVolCaption = captionRow.removeFromLeft (juce::jmax (18, captionRow.getWidth() / 3));
+            stripMeter = captionRow.reduced (1, 0).withSizeKeepingCentre (juce::jmax (0, captionRow.getWidth() - 2), 6);
+            stripVolume.setBounds (r.removeFromTop (knob + 2).withSizeKeepingCentre (knob, knob));
+            stripVolValue = r.removeFromTop (13);
+        }
+        else
+        {
+            stripVolValue = stripVolCaption = stripMeter = {};
+            stripVolume.setBounds ({});
+        }
+    }
+
+    void paintChannelStrip (juce::Graphics& g)
+    {
+        using namespace theme;
+        if (stripArea.isEmpty())
+            return;
+        g.setColour (colour::bg2);
+        g.fillRoundedRectangle (stripArea.toFloat(), radius::md);
+        g.setColour (colour::border);
+        g.drawRoundedRectangle (stripArea.toFloat().reduced (0.5f), radius::md, 1.0f);
+
+        const auto* c = channel();
+        if (c == nullptr)
+            return;
+        auto r = stripArea.reduced (stripPad, 6);
+        g.setColour (colour::textPrimary);
+        g.setFont (font (type::body, true));
+        g.drawFittedText (juce::String::fromUTF8 (c->name.c_str()), r.removeFromTop (stripNameHeight), juce::Justification::centredLeft, 1);
+
+        paintStripEffects (g);
+
+        if (! stripPanCaption.isEmpty())
+        {
+            g.setColour (colour::textSecondary);
+            g.setFont (font (type::caption));
+            g.drawText (caps (tr ("Pan")), stripPanCaption, juce::Justification::centredLeft);
+            g.drawText ("L", stripPan.getBounds().withX (stripPan.getX() - 10).withWidth (9), juce::Justification::centredLeft);
+            g.drawText ("R", stripPan.getBounds().withX (stripPan.getRight() + 1).withWidth (9), juce::Justification::centredRight);
+            g.setColour (colour::textPrimary);
+            g.drawFittedText (ui::panSpec ({}).text ((double) c->pan), stripPanValue, juce::Justification::centred, 1);
+        }
+
+        if (! stripVolCaption.isEmpty())
+        {
+            g.setColour (colour::textSecondary);
+            g.setFont (font (type::caption));
+            g.drawText (caps (tr ("Vol")), stripVolCaption, juce::Justification::centredLeft);
+            paintStripMeter (g);
+            g.setColour (colour::textPrimary);
+            g.drawFittedText (ui::percentSpec ({}, 0.78).text ((double) c->volume), stripVolValue, juce::Justification::centred, 1);
+        }
+    }
+
+    // the insert's effect slots: click one to open it in the effects window (the caption opens the chain itself)
+    void paintStripEffects (juce::Graphics& g)
+    {
+        using namespace theme;
+        const auto* slots = insertEffects();
+        const auto count = slots != nullptr ? (int) slots->size() : 0;
+
+        if (! stripFxCaption.isEmpty())
+        {
+            g.setColour (stripHoverFx ? colour::accent : colour::textSecondary);
+            g.setFont (font (type::caption));
+            const auto name = insertNameForTrack (insertTrack());
+            const auto caption = caps (tr ("Effects")) + "  " + name;
+            g.drawFittedText (caption, stripFxCaption, juce::Justification::centredLeft, 1, 0.7f);
+        }
+
+        const auto rows = stripSlotRows();
+        for (int i = 0; i < rows; ++i)
+        {
+            const auto b = stripSlotRow (i);
+            const auto used = i < count;
+            const auto hot = stripHoverSlot == i;
+            g.setColour (used ? colour::bg3 : colour::bg1);
+            g.fillRoundedRectangle (b.toFloat(), radius::sm);
+            if (hot)
+            {
+                g.setColour (colour::accent.withAlpha (0.8f));
+                g.drawRoundedRectangle (b.toFloat().reduced (0.5f), radius::sm, 1.0f);
+            }
+            if (used)
+            {
+                // the slot's LED: lit with the accent, a dim dot when the slot is switched off
+                g.setColour ((*slots)[(std::size_t) i].enabled ? colour::accent : colour::textDisabled.withAlpha (0.6f));
+                g.fillEllipse (juce::Rectangle<float> (4.0f, 4.0f).withCentre ({ (float) b.getX() + 6.0f, (float) b.getCentreY() }));
+            }
+            g.setColour (used ? colour::textPrimary : colour::textDisabled);
+            g.setFont (font (type::caption));
+            auto label = used ? quickpick::slotName (engine, (*slots)[(std::size_t) i]) : tr ("Slot {0}", { juce::String (i + 1) });
+            // when the strip is too short for all ten, the last row says how many effects are below it
+            if (i == rows - 1 && count > rows)
+                label += "  +" + juce::String (count - rows);
+            g.drawFittedText (label, b.reduced (used ? 13 : 6, 0), juce::Justification::centredLeft, 1, 0.7f);
+        }
+    }
+
+    void paintStripMeter (juce::Graphics& g)
+    {
+        using namespace theme;
+        if (stripMeter.isEmpty())
+            return;
+        const auto b = stripMeter.toFloat();
+        g.setColour (colour::bg0);
+        g.fillRoundedRectangle (b, 2.0f);
+        g.setColour (colour::border);
+        g.drawRoundedRectangle (b.reduced (0.5f), 2.0f, 1.0f);
+
+        if (stripLevel.level > 0.0f)
+        {
+            const auto db = juce::Decibels::gainToDecibels (stripLevel.level, -100.0f);
+            auto fill = b.withWidth (juce::jmax (1.0f, b.getWidth() * meters::scalePosition (db))).reduced (1.0f, 1.0f);
+            g.setColour (colour::accent);
+            g.fillRoundedRectangle (fill, 1.5f);
+        }
+        if (stripLevel.peak > 0.001f)
+        {
+            const auto db = juce::Decibels::gainToDecibels (stripLevel.peak, -100.0f);
+            const auto x = b.getX() + b.getWidth() * meters::scalePosition (db);
+            g.setColour (colour::textPrimary.withAlpha (0.85f));
+            g.fillRect (juce::Rectangle<float> (x - 1.0f, b.getY() + 1.0f, 1.5f, b.getHeight() - 2.0f));
+        }
+    }
+
+    // What the song says, into the strip's switches (the timer calls it, so they also follow the settings window)
+    void refreshChannelStrip()
+    {
+        const auto* c = channel();
+        if (c == nullptr)
+            return;
+        const auto soloed = channelSoloed();
+        if (stripMute.getToggleState() != c->muted)
+            stripMute.setToggleState (c->muted, juce::dontSendNotification);
+        if (stripSolo.getToggleState() != soloed)
+            stripSolo.setToggleState (soloed, juce::dontSendNotification);
+        if (! stripPan.isMouseButtonDown() && std::abs (stripPan.getValue() - (double) c->pan) > 1.0e-4)
+            stripPan.setValue ((double) c->pan, juce::dontSendNotification);
+        if (! stripVolume.isMouseButtonDown() && std::abs (stripVolume.getValue() - (double) c->volume) > 1.0e-4)
+            stripVolume.setValue ((double) c->volume, juce::dontSendNotification);
+
+        // the meter shows the output of the insert this channel plays through (the one the slots belong to)
+        const auto track = insertTrack();
+        const auto peak = track < 0 ? 0.0f
+                                    : juce::jmax (engine.getMeters().takeExtraPeak (track, 0), engine.getMeters().takeExtraPeak (track, 1));
+        stripLevel.tick (peak);
+
+        // the painted part is redrawn only when something reads differently (this runs 30 times a second)
+        const auto name = juce::String::fromUTF8 (c->name.c_str());
+        const auto panText = ui::panSpec ({}).text ((double) c->pan);
+        const auto volText = ui::percentSpec ({}, 0.78).text ((double) c->volume);
+        if (name != stripShownName || panText != stripShownPan || volText != stripShownVol)
+        {
+            stripShownName = name;
+            stripShownPan = panText;
+            stripShownVol = volText;
+            repaint (stripArea);
+        }
+        if (std::abs (stripLevel.level - stripShownLevel) > 0.002f || std::abs (stripLevel.peak - stripShownPeak) > 0.002f)
+        {
+            stripShownLevel = stripLevel.level;
+            stripShownPeak = stripLevel.peak;
+            repaint (stripMeter.expanded (1));
+        }
+
+        // the slots' names cost more than a repaint: they are read every 10th frame, and only when they changed
+        if (++stripFxTicks >= 10)
+        {
+            stripFxTicks = 0;
+            refreshStripEffects();
+        }
+    }
+
+    void refreshStripEffects()
+    {
+        const auto* c = channel();
+        if (c == nullptr)
+            return;
+        const auto track = insertTrack();
+        juce::String signature (track);
+        if (const auto* slots = insertEffects(); slots != nullptr)
+            for (const auto& s : *slots)
+                signature << "|" << quickpick::slotName (engine, s) << (s.enabled ? "+" : "-");
+        if (signature == fxSignature)
+            return;
+        fxSignature = signature;
+        repaint (stripArea);
+        const auto name = juce::String::fromUTF8 (c->name.c_str());
+        stripMute.setTooltip (tr ("Mute or unmute channel {0}", { name }));
+        stripSolo.setTooltip (tr ("Solo channel {0}", { name }));
+    }
+
+    void toggleChannelMute()
+    {
+        const auto i = channelIndex();
+        if (i < 0)
+            return;
+        engine.editSong ([i] (Song& s) { auto& c = s.channels[(std::size_t) i]; c.muted = ! c.muted; });
+        refreshChannelStrip();
+    }
+
+    void toggleChannelSolo()
+    {
+        const auto i = channelIndex();
+        if (i < 0)
+            return;
+        engine.editSong ([i] (Song& s) { noteedit::soloChannel (s, i); });
+        refreshChannelStrip();
+    }
+
+    // --- the slots' right-click menu (bypass, replace, delete) ----------------------------------------------
+    // Writes an effect into a slot of the insert the strip belongs to. A row the chain does not reach adds it to the
+    // end: a chain is contiguous, so an effect lands after the ones before it.
+    void putInStripSlot (int slot, const EffectSlot& fx)
+    {
+        const auto track = insertTrack();
+        if (track < 0)
+            return;
+        engine.editSong ([track, slot, fx] (Song& song) {
+            if (! juce::isPositiveAndBelow (track, (int) song.mixer.size()))
+                return;
+            auto& effects = song.mixer[(std::size_t) track].effects;
+            if (juce::isPositiveAndBelow (slot, (int) effects.size()))
+                effects[(std::size_t) slot] = fx;
+            else if ((int) effects.size() < maxEffectSlots)
+                effects.push_back (fx);
+        });
+        refreshStripEffects();
+    }
+
+    void toggleStripSlotBypass (int slot)
+    {
+        const auto track = insertTrack();
+        if (track < 0)
+            return;
+        engine.editSong ([track, slot] (Song& song) {
+            if (! juce::isPositiveAndBelow (track, (int) song.mixer.size()))
+                return;
+            auto& effects = song.mixer[(std::size_t) track].effects;
+            if (juce::isPositiveAndBelow (slot, (int) effects.size()))
+                effects[(std::size_t) slot].enabled = ! effects[(std::size_t) slot].enabled;
+        });
+        refreshStripEffects();
+    }
+
+    void deleteStripSlot (int slot)
+    {
+        const auto track = insertTrack();
+        if (track < 0)
+            return;
+        engine.editSongStructural ([track, slot] (Song& song) { song.removeEffectSlot (track, slot); });
+        stripHoverSlot = -1;
+        refreshStripEffects();
+    }
+
+    // the slot's own menu, out of the way of the click that opens it (an empty row adds an effect instead)
+    void showStripSlotMenu (int slot)
+    {
+        const auto track = insertTrack();
+        const auto* slots = insertEffects();
+        if (track < 0 || slots == nullptr)
+            return;
+
+        const auto used = juce::isPositiveAndBelow (slot, (int) slots->size());
+
+        // the built-in effects, then the user's Plugin database folders (the Mixer's replace menu, in the strip)
+        juce::PopupMenu replace;
+        for (auto kind : addableEffects())
+            replace.addItem (addableEffectName (kind), addableEffectAvailable (kind), used && (*slots)[(std::size_t) slot].kind == kind,
+                             [this, slot, kind] {
+                                 if (const auto made = newAddableEffect (kind, engine.getSong().bpm))
+                                     putInStripSlot (slot, *made);
+                             });
+        {
+            juce::PopupMenu folders;
+            if (quickpick::addFolderGroups (folders, engine, std::function<void (EffectSlot)> ([this, slot] (EffectSlot fx) { putInStripSlot (slot, fx); })))
+            {
+                folders.addSubMenu (tr ("All effects"), replace);
+                quickpick::addFolderViewItems (folders, engine);
+                replace = folders;
+            }
+        }
+
+        juce::PopupMenu menu;
+        if (used)
+        {
+            menu.addSectionHeader (quickpick::slotName (engine, (*slots)[(std::size_t) slot]));
+            menu.addItem (tr ("Bypass"), true, ! (*slots)[(std::size_t) slot].enabled, [this, slot] { toggleStripSlotBypass (slot); });
+            menu.addSubMenu (tr ("Replace with"), replace);
+            menu.addSeparator();
+            menu.addItem (tr ("Delete"), [this, slot] { deleteStripSlot (slot); });
+        }
+        else
+        {
+            menu.addSectionHeader (insertNameForTrack (track) + ": " + tr ("Slot {0}", { juce::String (slot + 1) }));
+            menu.addSubMenu (tr ("Add effect"), replace);
+        }
+        menu.showMenuAsync (juce::PopupMenu::Options().withMousePosition());
+    }
+
+    // slot < 0: the chain itself; a slot: the effects window with that slot's controls shown
+    void openChannelEffects (int slot)
+    {
+        const auto track = insertTrack();
+        if (track < 0)
+            return;
+        if (const auto* slots = insertEffects(); slots == nullptr || slot >= (int) slots->size())
+            slot = -1;
+        openToolWindow (makeInsertEffectsPanel (engine, track, slot), tr ("Effects") + " - " + insertNameForTrack (track), "audioeditor-effects");
+    }
 };
 
 juce::PopupMenu AudioEditor::editMenu (bool contextual)
@@ -3692,12 +4292,20 @@ void openAudioEditorForInsert (AudioEngine& engine, int insert)
     editor->setRecordSource (insert);
 }
 
-std::unique_ptr<juce::Component> makeAudioEditorForSnapshot (AudioEngine& engine, audioedit::Document doc, bool spectrum)
+std::unique_ptr<juce::Component> makeAudioEditorForSnapshot (AudioEngine& engine, audioedit::Document doc, bool spectrum, int channel)
 {
-    auto editor = std::make_unique<AudioEditor> (engine, Source {});
+    Source source;
+    if (juce::isPositiveAndBelow (channel, (int) engine.getSong().channels.size()))
+    {
+        source.kind = Source::Kind::channel;
+        source.index = channel;
+        source.path = juce::String::fromUTF8 (engine.getSong().channels[(std::size_t) channel].samplePath.c_str());
+    }
+    auto editor = std::make_unique<AudioEditor> (engine, source);
     const auto frames = doc.audio.frames();
     editor->setDocument (std::move (doc), tr ("Open"));
     editor->selectForSnapshot ({ frames / 4, frames / 2 }, spectrum);
+    editor->setStripLevelForSnapshot (0.55f); // a level for the picture (the meters are silent off-screen)
     return editor;
 }
 

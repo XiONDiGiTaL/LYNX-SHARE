@@ -70,7 +70,9 @@ inline juce::Colour rowBlack { 0xff16171b };     // rows of black keys
 inline juce::Colour noteSoft { 0xffb3545a };     // note colour at velocity 0
 inline juce::Colour noteHard { 0xffff6b6e };     // note colour at velocity 1
 inline juce::Colour noteMuted { 0xff4a4e57 };
-inline juce::Colour audioClip { 0xff5a87b8 };
+// The audio clip colour (Playlist clips and their waveforms, the Browser preview): a light tint of the theme's primary
+// colour, set by setPalette, so it follows the theme instead of a fixed blue.
+inline juce::Colour audioClip { 0xffea6062 };
 } // namespace colour
 
 // User themes (round 162d): the tokens above hold LYNX's built-in look until a theme replaces them (ui/ThemeSettings.h

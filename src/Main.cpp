@@ -8010,10 +8010,18 @@ private:
                 ae::addMarker (d, (std::int64_t) frames / 8, "Snare");
                 ae::addRegion (d, { (std::int64_t) frames / 2, (std::int64_t) frames * 3 / 4 }, "Fill");
                 ae::setLoop (d, { 0, (std::int64_t) frames });
-                auto wave = lynx::makeAudioEditorForSnapshot (offline, d, false);
+                // the channel strip (round 168s): the first channel that plays a sample, else the first one
+                int stripChannel = -1;
+                const auto& demoChannels = offline.getSong().channels;
+                for (int c = 0; c < (int) demoChannels.size() && stripChannel < 0; ++c)
+                    if (! demoChannels[(std::size_t) c].samplePath.empty())
+                        stripChannel = c;
+                if (stripChannel < 0 && ! demoChannels.empty())
+                    stripChannel = 0;
+                auto wave = lynx::makeAudioEditorForSnapshot (offline, d, false, stripChannel);
                 juce::File (prefix + "-audioeditor-menu.txt").replaceWithText (lynx::audioEditorMenuForSnapshot (*wave).joinIntoString ("\n") + "\n");
                 saveWindow (std::move (wave), "-audioeditor.png");
-                saveWindow (lynx::makeAudioEditorForSnapshot (offline, d, true), "-audioeditor-spectrum.png");
+                saveWindow (lynx::makeAudioEditorForSnapshot (offline, d, true, stripChannel), "-audioeditor-spectrum.png");
             }
 
             // the tempo tapper after five steady taps (round 132)

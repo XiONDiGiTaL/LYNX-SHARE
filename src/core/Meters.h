@@ -21,6 +21,10 @@ public:
 
         raise (peaks[(std::size_t) track * 2], left);
         raise (peaks[(std::size_t) track * 2 + 1], right);
+        // a second reader (the audio editor's channel strip) gets its own copy of the peaks: takePeak resets, so two
+        // readers of the same slot would take the peaks from each other
+        raise (extra[(std::size_t) track * 2], left);
+        raise (extra[(std::size_t) track * 2 + 1], right);
     }
 
     // UI: peak since the last read. channel 0 = left, 1 = right.
@@ -30,6 +34,15 @@ public:
             return 0.0f;
 
         return peaks[(std::size_t) track * 2 + (std::size_t) channel].exchange (0.0f, std::memory_order_relaxed);
+    }
+
+    // UI, a second reader: the same peaks on their own counters, so a strip that shows them does not take the mixer's.
+    float takeExtraPeak (int track, int channel) noexcept
+    {
+        if (track < 0 || track >= maxMixerTracks)
+            return 0.0f;
+
+        return extra[(std::size_t) track * 2 + (std::size_t) channel].exchange (0.0f, std::memory_order_relaxed);
     }
 
     // the audio editor's recording tap (round 86): input, Master (0) or a mixer insert
@@ -51,5 +64,6 @@ private:
     }
 
     std::array<std::atomic<float>, maxMixerTracks * 2> peaks {};
+    std::array<std::atomic<float>, maxMixerTracks * 2> extra {};
 };
 } // namespace lynx

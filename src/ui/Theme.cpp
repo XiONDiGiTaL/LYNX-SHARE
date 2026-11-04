@@ -390,6 +390,8 @@ void setPalette (const themes::Palette& p)
     accent = c (p.accent); accentHover = c (p.accentHover); accentPressed = c (p.accentPressed); accentMuted = c (p.accentMuted);
     onAccent = c (p.onAccent); selectionFill = c (p.selectionFill);
     colour::selection = accent; colour::playhead = accent; colour::stepOn = accent;
+    // the audio clip colour follows the theme's primary colour (Playlist clips and their waveforms, the Browser preview)
+    colour::audioClip = accent.interpolatedWith (juce::Colours::white, 0.2f);
     knobArc = c (p.knobArc); knobTrack = c (p.knobTrack); colour::stepOff = c (p.stepOff); stepOffAlt = c (p.stepOffAlt); stepNote = c (p.stepNote);
     gridBar = c (p.gridBar); gridBeat = c (p.gridBeat); gridStep = c (p.gridStep); keyBlack = c (p.keyBlack);
     rowWhite = c (p.rowWhite); rowBlack = c (p.rowBlack);

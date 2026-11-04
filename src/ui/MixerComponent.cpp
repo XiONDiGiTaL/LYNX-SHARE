@@ -5525,4 +5525,45 @@ void MixerComponent::resized()
     viewport.setBounds (area);
     strips.setVisibleHeight (area.getHeight() - viewport.getScrollBarThickness());
 }
+
+namespace
+{
+// The effects panel inside a viewport, fitted as the Mixer fits its own (round 163: it scrolls when it is short).
+class InsertEffectsView final : public juce::Component
+{
+public:
+    explicit InsertEffectsView (AudioEngine& e) : panel (e)
+    {
+        view.setViewedComponent (&panel, false);
+        view.setScrollBarsShown (true, false);
+        view.setScrollBarThickness (10);
+        addAndMakeVisible (view);
+    }
+
+    EffectsPanel& effects() noexcept { return panel; }
+
+    void resized() override
+    {
+        view.setBounds (getLocalBounds());
+        panel.fitToView (view.getWidth(), view.getHeight(), view.getScrollBarThickness());
+    }
+
+private:
+    juce::Viewport view;
+    EffectsPanel panel;
+};
+} // namespace
+
+std::unique_ptr<juce::Component> makeInsertEffectsPanel (AudioEngine& engine, int track, int slot)
+{
+    auto content = std::make_unique<InsertEffectsView> (engine);
+    content->effects().setTrack (track);
+    content->setSize (320, 460);
+    if (slot >= 0)
+    {
+        content->effects().selectSlot (slot);
+        content->effects().openSlotEditor (slot);
+    }
+    return content;
+}
 } // namespace lynx

@@ -29,8 +29,10 @@ void openAudioEditorRecording (AudioEngine& engine);
 // A mixer insert (0 = Master): opens with the recording source set to it, like an editor sitting in a mixer slot.
 void openAudioEditorForInsert (AudioEngine& engine, int insert);
 
-// --snapshot: the editor showing `doc` (selection = the second quarter), in the waveform or spectrogram view.
-std::unique_ptr<juce::Component> makeAudioEditorForSnapshot (AudioEngine& engine, audioedit::Document doc, bool spectrum);
+// --snapshot: the editor showing `doc` (selection = the second quarter), in the waveform or spectrogram view, and with
+// the channel strip of `channel` when the driver has one (round 168s, -1: an editor opened from a file).
+std::unique_ptr<juce::Component> makeAudioEditorForSnapshot (AudioEngine& engine, audioedit::Document doc, bool spectrum,
+                                                            int channel = -1);
 // --snapshot: the items of the editor's main menu, one per line ("Section > Item"), for the menu check.
 juce::StringArray audioEditorMenuForSnapshot (juce::Component& editor);
 // --edisonshot (round 165l): a tool window of `editor` (tool = audiotools::Tool as int; envelopeMode 0 wave,

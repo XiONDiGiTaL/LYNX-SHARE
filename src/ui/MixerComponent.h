@@ -2,6 +2,7 @@
 
 #include <functional>
 #include <map>
+#include <memory>
 #include <optional>
 #include <set>
 #include <vector>
@@ -412,6 +413,11 @@ private:
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (EffectsPanel)
 };
+
+// An insert's effect chain in its own window (the audio editor's channel strip opens it): the panel inside a viewport,
+// fitted to the window as the Mixer's own effects view does. `track` 0 = Master; `slot` >= 0 selects that slot (its
+// controls are shown, and a plugin or an effect with its own window opened), as clicking the slot in the panel does.
+std::unique_ptr<juce::Component> makeInsertEffectsPanel (AudioEngine& engine, int track, int slot = -1);
 
 // FL's "Mixer layout" drop-down in the Mixer's title bar (issue #52, REA round 168h): the current layout's name and a
 // chevron; a click lists Compact, Compact 2, Compact alt | Wide, Wide 2, Wide 3, Wide alt | Extra large.

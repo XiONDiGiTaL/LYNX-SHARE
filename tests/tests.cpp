@@ -4329,6 +4329,15 @@ TEST (mixer_routes_mutes_solos_and_meters)
     CHECK (std::abs (meters.takePeak (0, 1) - 1.0f) < armTolerance (1e-4f, 4e-4f));
     CHECK (meters.takePeak (1, 0) == 0.0f); // reading resets
     CHECK (meters.takePeak (3, 0) == 0.0f); // insert with no channel
+
+    // a second reader (the audio editor's channel strip) has its own copy of the peaks: the mixer's read does not
+    // take them, and its own read resets only them
+    lynx::MeterBank twoReaders;
+    twoReaders.accumulate (1, 0.25f, 0.5f);
+    CHECK (twoReaders.takePeak (1, 0) == 0.25f);
+    CHECK (twoReaders.takeExtraPeak (1, 0) == 0.25f);
+    CHECK (twoReaders.takeExtraPeak (1, 0) == 0.0f);
+    CHECK (twoReaders.takeExtraPeak (1, 1) == 0.5f);
 }
 
 TEST (next_free_insert_and_flp_mixer_import)
