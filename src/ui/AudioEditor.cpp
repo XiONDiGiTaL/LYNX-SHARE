@@ -18,6 +18,7 @@
 #include "core/EdisonScript.h"
 #include "core/Instruments.h"
 #include "core/MeterBallistics.h"
+#include "core/MixerOps.h"
 #include "core/NewtoneFx.h"
 #include "core/NoteEdit.h"
 #include "core/ProjectContents.h"
@@ -868,6 +869,11 @@ public:
                     renameChannel();
                 return;
             }
+            if (! stripRoute.isEmpty() && stripRoute.contains (e.getPosition()))
+            {
+                showRoutingMenu();
+                return;
+            }
             if (const auto slot = stripSlotAt (e.getPosition()); e.mods.isPopupMenu() && slot >= 0)
                 showStripSlotMenu (slot);
             else if (slot >= 0)
@@ -1025,23 +1031,26 @@ public:
         const auto slot = stripSlotAt (p);
         const auto fx = stripFxCaption.contains (p);
         const auto name = stripNameArea.contains (p);
-        if (slot != stripHoverSlot || fx != stripHoverFx || name != stripHoverName)
+        const auto route = stripRoute.contains (p);
+        if (slot != stripHoverSlot || fx != stripHoverFx || name != stripHoverName || route != stripHoverRoute)
         {
             stripHoverSlot = slot;
             stripHoverFx = fx;
             stripHoverName = name;
+            stripHoverRoute = route;
             repaint (stripArea);
         }
-        setMouseCursor (slot >= 0 || fx || name ? juce::MouseCursor::PointingHandCursor : juce::MouseCursor::NormalCursor);
+        setMouseCursor (slot >= 0 || fx || name || route ? juce::MouseCursor::PointingHandCursor : juce::MouseCursor::NormalCursor);
     }
 
     void mouseExit (const juce::MouseEvent&) override
     {
-        if (stripHoverSlot >= 0 || stripHoverFx || stripHoverName)
+        if (stripHoverSlot >= 0 || stripHoverFx || stripHoverName || stripHoverRoute)
         {
             stripHoverSlot = -1;
             stripHoverFx = false;
             stripHoverName = false;
+            stripHoverRoute = false;
             repaint (stripArea);
         }
     }
@@ -3523,15 +3532,15 @@ private:
     juce::Rectangle<int> rulerArea, waveArea, levelArea, overviewArea, infoArea, stripArea;
     // the channel strip: the channel's name, its switches, the insert's effect slots (all painted) and the pan and
     // volume controls
-    static constexpr int stripPad = 8, stripNameHeight = 20, stripRowHeight = 24, stripSlotHeight = 18;
+    static constexpr int stripPad = 8, stripNameHeight = 20, stripRowHeight = 24, stripSlotHeight = 18, stripRouteHeight = 16;
     juce::TextButton stripMute { "Mute" }, stripSolo { "Solo" };
     juce::Slider stripPan { juce::Slider::LinearHorizontal, juce::Slider::NoTextBox };
     juce::Slider stripVolume { juce::Slider::RotaryHorizontalVerticalDrag, juce::Slider::NoTextBox };
-    juce::Rectangle<int> stripFxCaption, stripSlots, stripPanCaption, stripPanValue, stripVolCaption, stripVolValue, stripMeter, stripNameArea;
+    juce::Rectangle<int> stripFxCaption, stripSlots, stripPanCaption, stripPanValue, stripVolCaption, stripVolValue, stripMeter, stripNameArea, stripRoute;
     lynx::meters::PeakHold stripLevel;
     int stripHoverSlot = -1, stripFxTicks = 0;
     float stripShownLevel = 0.0f, stripShownPeak = 0.0f;
-    bool stripHoverFx = false, stripHoverName = false;
+    bool stripHoverFx = false, stripHoverName = false, stripHoverRoute = false;
     juce::String fxSignature, stripShownName, stripShownPan, stripShownVol;
     IconButton menuButton { "menu", Icon::panelMenu }, undoButton { "undo", Icon::undo }, redoButton { "redo", Icon::redo },
         historyButton { "history", Icon::chevronDown }, recordButton { "record", Icon::record }, recordMenuButton { "recordMenu", Icon::chevronDown },
@@ -3628,7 +3637,9 @@ private:
     {
         auto r = stripArea.reduced (stripPad, 6);
         stripNameArea = r.removeFromTop (stripNameHeight); // the channel's name: double-click renames and colours it
-        r.removeFromTop (6);
+        r.removeFromTop (juce::jmin (4, juce::jmax (0, r.getHeight())));
+        stripRoute = r.removeFromTop (juce::jmin (stripRouteHeight, juce::jmax (0, r.getHeight()))); // the insert it plays through
+        r.removeFromTop (juce::jmin (6, juce::jmax (0, r.getHeight())));
         auto row = r.removeFromTop (stripRowHeight);
         const auto half = juce::jmax (28, (row.getWidth() - 4) / 2);
         stripMute.setBounds (row.removeFromLeft (half));
@@ -3705,6 +3716,7 @@ private:
             g.fillRect (nameArea.withTop (nameArea.getBottom() - 1).withHeight (1));
         }
 
+        paintStripRoute (g);
         paintStripEffects (g);
 
         if (! stripPanCaption.isEmpty())
@@ -3727,6 +3739,33 @@ private:
             g.setColour (colour::textPrimary);
             g.drawFittedText (ui::percentSpec ({}, 0.78).text ((double) c->volume), stripVolValue, juce::Justification::centred, 1);
         }
+    }
+
+    // the insert the channel plays through: what the slots, the effects window and the meter belong to, and where a
+    // click routes it somewhere else (the rack's own "target mixer track")
+    void paintStripRoute (juce::Graphics& g)
+    {
+        using namespace theme;
+        if (stripRoute.isEmpty())
+            return;
+        auto area = stripRoute;
+        const auto caption = area.removeFromLeft (juce::jmax (18, area.getWidth() / 3));
+        g.setColour (stripHoverRoute ? colour::accent : colour::textSecondary);
+        g.setFont (font (type::caption));
+        g.drawText (caps (tr ("Insert")), caption, juce::Justification::centredLeft);
+
+        g.setColour (colour::bg1);
+        g.fillRoundedRectangle (area.toFloat(), radius::sm);
+        g.setColour (stripHoverRoute ? colour::accent : colour::border);
+        g.drawRoundedRectangle (area.toFloat().reduced (0.5f), radius::sm, 1.0f);
+
+        const auto track = insertTrack();
+        auto label = insertNameForTrack (track);
+        if (track > 0 && label != tr ("Insert {0}", { juce::String (track) })) // "3  Drums", or "Insert 3" when unnamed
+            label = juce::String (track) + "  " + label;
+        g.setColour (colour::textPrimary);
+        g.setFont (font (type::caption));
+        g.drawFittedText (label, area.reduced (6, 0), juce::Justification::centredLeft, 1, 0.7f);
     }
 
     // the insert's effect slots: click one to open it in the effects window (the caption opens the chain itself)
@@ -3868,6 +3907,46 @@ private:
             return;
         fxSignature = signature;
         repaint (stripArea);
+    }
+
+    // Routes the channel to an insert: mixerops::routeChannel, the call the rack's target mixer track makes (an
+    // insert past the end of the mixer is added), so the slots, the effects window and the meter follow at once.
+    void routeChannelTo (int track)
+    {
+        const auto i = channelIndex();
+        if (i < 0)
+            return;
+        if (track == engine.getSong().channels[(std::size_t) i].mixerTrack)
+            return;
+        engine.editSong ([i, track] (Song& song) { mixerops::routeChannel (song, i, track); });
+        refreshStripEffects();
+        repaint (stripArea);
+    }
+
+    void showRoutingMenu()
+    {
+        const auto i = channelIndex();
+        if (i < 0)
+            return;
+        const auto current = engine.getSong().channels[(std::size_t) i].mixerTrack;
+        const auto& mixer = engine.getSong().mixer;
+
+        juce::PopupMenu menu;
+        menu.addItem (tr ("Master"), true, current <= 0, [this] { routeChannelTo (0); });
+        if (mixer.size() > 1)
+            menu.addSeparator();
+        for (int t = 1; t < (int) mixer.size(); ++t)
+            menu.addItem (juce::String (t) + "  " + insertNameForTrack (t), true, current == t, [this, t] { routeChannelTo (t); });
+        menu.addSeparator();
+        menu.addItem (tr ("Assign to free mixer track"), [this, i] {
+            engine.editSong ([i] (Song& s) {
+                if (i < (int) s.channels.size())
+                    s.channels[(std::size_t) i].mixerTrack = s.claimFreeInsert();
+            });
+            refreshStripEffects();
+            repaint (stripArea);
+        });
+        menu.showMenuAsync (juce::PopupMenu::Options().withMousePosition());
     }
 
     // The channel's name and colour, through the dialog the Channel Rack's rename uses (F2 picks a colour there)
