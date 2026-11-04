@@ -29,6 +29,10 @@ std::optional<EffectSlot> newAddableEffect (EffectKind kind, double bpm = 120.0)
 bool loadMixerTrackState (AudioEngine& engine, int track, const juce::File& file, bool asNewInsert);
 bool saveMixerTrackState (AudioEngine& engine, int track, const juce::File& file);
 
+// The insert's built-in EQ (3 bands × gain, frequency and width) in the call-out the Mixer's track menu shows, anchored
+// at `anchorScreenBounds` (the audio editor's strip opens the same one from its EQ caption).
+void showTrackEqEditor (AudioEngine& engine, int track, juce::Rectangle<int> anchorScreenBounds);
+
 // FL's mixer presets (REA round 167q): FL's own (.fst of Data\Patches\Mixer presets and Documents\Image-Line\FL
 // Studio\Presets\Mixer presets) and LYNX's states (.lynxtrack of Documents\LYNX\Mixer states), all read here.
 namespace mixerpresets

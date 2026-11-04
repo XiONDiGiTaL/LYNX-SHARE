@@ -5,6 +5,7 @@
 #include "ui/EditorTools.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <functional>
 #include <map>
@@ -619,6 +620,23 @@ public:
             stripInsMute.setTooltip (tr ("Mute the track"));
             stripInsMute.onClick = [this] { toggleInsertMute(); };
             addAndMakeVisible (stripInsMute);
+
+            // the insert's built-in EQ: its three band gains, right under the slots (the caption opens all of it, so
+            // frequencies and widths are here too)
+            const juce::String bands[] = { tr ("Low"), tr ("Mid"), tr ("High") };
+            for (int b = 0; b < 3; ++b)
+            {
+                auto& k = stripEqKnobs[(std::size_t) b];
+                k.setSliderStyle (juce::Slider::RotaryHorizontalVerticalDrag);
+                k.setTextBoxStyle (juce::Slider::NoTextBox, false, 0, 0);
+                k.setRange (-18.0, 18.0, 0.1);
+                k.setDoubleClickReturnValue (true, 0.0);
+                k.setMouseClickGrabsKeyboardFocus (false);
+                k.setWantsKeyboardFocus (false);
+                k.setTooltip (bands[b] + " - " + tr ("Gain"));
+                k.onValueChange = [this, b] { setStripEqGain (b, stripEqKnobs[(std::size_t) b].getValue()); };
+                addAndMakeVisible (k);
+            }
             refreshChannelStrip();
             refreshStripEffects(); // (the slots and the buttons' tooltips are read here, then every 10th timer frame)
         }
@@ -897,6 +915,12 @@ public:
                 showRoutingMenu();
                 return;
             }
+            // the insert's EQ: the caption opens the whole EQ (frequency and width included)
+            if (! stripEqCaption.isEmpty() && stripEqCaption.contains (e.getPosition()))
+            {
+                showInsertEq();
+                return;
+            }
             // the insert's sends: the caption adds or removes a route, a row is dragged for its level
             if (! stripSendsCaption.isEmpty() && stripSendsCaption.contains (e.getPosition()))
             {
@@ -1087,8 +1111,9 @@ public:
         const auto route = stripRoute.contains (p);
         const auto sendRow = stripSendAt (p);
         const auto sends = stripSendsCaption.contains (p);
+        const auto eq = stripEqCaption.contains (p);
         if (slot != stripHoverSlot || fx != stripHoverFx || name != stripHoverName || route != stripHoverRoute || sendRow != stripHoverSendRow
-            || sends != stripHoverSendsCaption)
+            || sends != stripHoverSendsCaption || eq != stripHoverEq)
         {
             stripHoverSlot = slot;
             stripHoverFx = fx;
@@ -1096,16 +1121,18 @@ public:
             stripHoverRoute = route;
             stripHoverSendRow = sendRow;
             stripHoverSendsCaption = sends;
+            stripHoverEq = eq;
             repaint (stripArea);
         }
         setMouseCursor (sendRow >= 0 ? juce::MouseCursor::UpDownLeftRightResizeCursor
-                                     : slot >= 0 || fx || name || route || sends ? juce::MouseCursor::PointingHandCursor
-                                                                                : juce::MouseCursor::NormalCursor);
+                                     : slot >= 0 || fx || name || route || sends || eq ? juce::MouseCursor::PointingHandCursor
+                                                                                       : juce::MouseCursor::NormalCursor);
     }
 
     void mouseExit (const juce::MouseEvent&) override
     {
-        if (stripHoverSlot >= 0 || stripHoverFx || stripHoverName || stripHoverRoute || stripHoverSendRow >= 0 || stripHoverSendsCaption)
+        if (stripHoverSlot >= 0 || stripHoverFx || stripHoverName || stripHoverRoute || stripHoverSendRow >= 0 || stripHoverSendsCaption
+            || stripHoverEq)
         {
             stripHoverSlot = -1;
             stripHoverFx = false;
@@ -1113,6 +1140,7 @@ public:
             stripHoverRoute = false;
             stripHoverSendRow = -1;
             stripHoverSendsCaption = false;
+            stripHoverEq = false;
             repaint (stripArea);
         }
     }
@@ -3608,13 +3636,15 @@ private:
     juce::Slider stripFader { juce::Slider::LinearHorizontal, juce::Slider::NoTextBox }; // the routed insert's own fader
     juce::TextButton stripInsMute { "M" };                                               // and its mute switch
     juce::Rectangle<int> stripFxCaption, stripSlots, stripPanCaption, stripPanValue, stripVolCaption, stripVolValue, stripMeter, stripNameArea, stripRoute,
-        stripInsCaption, stripInsValue, stripSendsCaption, stripSends;
+        stripInsCaption, stripInsValue, stripSendsCaption, stripSends, stripEqCaption, stripEqValue;
+    std::array<juce::Slider, 3> stripEqKnobs; // the insert's built-in EQ: low, mid and high gain
     lynx::meters::PeakHold stripLevel;
     int stripHoverSlot = -1, stripFxTicks = 0, stripHoverSendRow = -1, stripSendDragRow = -1;
+    bool stripHoverEq = false;
     float stripShownLevel = 0.0f, stripShownPeak = 0.0f;
     bool stripHoverFx = false, stripHoverName = false, stripHoverRoute = false, stripHoverSendsCaption = false;
     ui::ValueDrag stripSendDrag;
-    juce::String fxSignature, stripShownName, stripShownPan, stripShownVol, stripShownInsVol, stripShownSends;
+    juce::String fxSignature, stripShownName, stripShownPan, stripShownVol, stripShownInsVol, stripShownSends, stripShownEq;
     bool stripShownInsMute = false;
     int stripShownSendCount = -1;
     IconButton menuButton { "menu", Icon::panelMenu }, undoButton { "undo", Icon::undo }, redoButton { "redo", Icon::redo },
@@ -3826,11 +3856,38 @@ private:
                                     ? sendBlock (sendRows)
                                     : 0;
 
+        // the insert's EQ: three gain knobs and their values, while the chain still shows four slots
+        constexpr int eqBlock = 13 + 26 + 11 + 6;
+        const auto canEq = insertTrack() >= 0;
+        const auto eqHeight = canEq && r.getHeight() - volHeight - panHeight - insHeight - sendHeight - eqBlock >= 4 * stripSlotHeight ? eqBlock : 0;
+
         stripFxCaption = r.removeFromTop (juce::jmin (14, juce::jmax (0, r.getHeight())));
         r.removeFromTop (juce::jmin (2, juce::jmax (0, r.getHeight())));
         const auto rows = juce::jlimit (0, maxEffectSlots,
-                                        juce::jmax (0, r.getHeight() - volHeight - panHeight - insHeight - sendHeight) / stripSlotHeight);
+                                        juce::jmax (0, r.getHeight() - volHeight - panHeight - insHeight - sendHeight - eqHeight) / stripSlotHeight);
         stripSlots = r.removeFromTop (rows * stripSlotHeight);
+
+        // the insert's built-in EQ, right under its effects (it shapes what the slots leave)
+        if (eqHeight > 0)
+        {
+            stripEqCaption = r.removeFromTop (13);
+            auto knobRow = r.removeFromTop (26);
+            const auto cell = knobRow.getWidth() / 3;
+            for (int b = 0; b < 3; ++b)
+            {
+                const auto column = knobRow.removeFromLeft (b == 2 ? knobRow.getWidth() : cell);
+                stripEqKnobs[(std::size_t) b].setBounds (column.withSizeKeepingCentre (juce::jmin (26, column.getWidth()), 26));
+            }
+            stripEqValue = r.removeFromTop (11);
+            r.removeFromTop (juce::jmin (6, juce::jmax (0, r.getHeight())));
+        }
+        else
+        {
+            stripEqCaption = {};
+            stripEqValue = {};
+            for (auto& k : stripEqKnobs)
+                k.setBounds ({});
+        }
 
         // the insert's fader right under its slots (the two belong together), dropped before the channel's own
         // controls when the strip is too short to hold everything
@@ -3925,6 +3982,7 @@ private:
 
         paintStripRoute (g);
         paintStripEffects (g);
+        paintStripEq (g);
         paintStripInsertFader (g);
         paintStripSends (g);
 
@@ -4019,6 +4077,37 @@ private:
             if (i == rows - 1 && count > rows)
                 label += "  +" + juce::String (count - rows);
             g.drawFittedText (label, b.reduced (used ? 13 : 6, 0), juce::Justification::centredLeft, 1, 0.7f);
+        }
+    }
+
+    // The insert's built-in EQ: its three band gains as knobs with their values under them, and the caption that opens
+    // the whole EQ (the bands' frequencies and widths) in the Mixer's call-out
+    void paintStripEq (juce::Graphics& g)
+    {
+        using namespace theme;
+        if (stripEqCaption.isEmpty())
+            return;
+
+        const auto eq = insertEq();
+        g.setColour (stripHoverEq ? colour::accent : eq.active() ? colour::textPrimary : colour::textSecondary);
+        g.setFont (font (type::caption));
+        g.drawFittedText (caps (tr ("EQ")), stripEqCaption, juce::Justification::centredLeft, 1, 0.7f);
+        g.setColour (colour::textDisabled);
+        g.drawText ("dB", stripEqCaption, juce::Justification::centredRight, false);
+        if (stripHoverEq) // one click away from the frequencies and widths
+        {
+            g.setColour (colour::accent.withAlpha (0.8f));
+            g.fillRect (stripEqCaption.withTop (stripEqCaption.getBottom() - 1).withHeight (1));
+        }
+
+        const auto cell = stripEqValue.getWidth() / 3;
+        for (int b = 0; b < 3; ++b)
+        {
+            const auto gain = eq.gainDb[(std::size_t) b];
+            const auto text = (gain > 0.05f ? "+" : "") + juce::String (gain, 1);
+            g.setColour (std::abs (gain) < 0.05f ? colour::textDisabled : colour::textPrimary);
+            g.setFont (font (9.0f));
+            g.drawFittedText (text, stripEqValue.withX (stripEqValue.getX() + b * cell).withWidth (cell), juce::Justification::centred, 1, 0.7f);
         }
     }
 
@@ -4161,6 +4250,21 @@ private:
             stripFader.setValue ((double) insVol, juce::dontSendNotification);
         if (stripInsMute.getToggleState() != insertMuted())
             stripInsMute.setToggleState (insertMuted(), juce::dontSendNotification);
+
+        // the insert's EQ is another window's too (the Mixer's call-out): read its three gains back
+        const auto eq = insertEq();
+        juce::String eqText;
+        for (std::size_t b = 0; b < stripEqKnobs.size(); ++b)
+        {
+            if (! stripEqKnobs[b].isMouseButtonDown() && std::abs (stripEqKnobs[b].getValue() - (double) eq.gainDb[b]) > 1.0e-4)
+                stripEqKnobs[b].setValue ((double) eq.gainDb[b], juce::dontSendNotification);
+            eqText << (b > 0 ? "|" : "") << juce::String (eq.gainDb[b], 2);
+        }
+        if (eqText != stripShownEq)
+        {
+            stripShownEq = eqText;
+            repaint (stripEqCaption.getUnion (stripEqValue).expanded (1));
+        }
 
         // the meter shows the output of the insert this channel plays through (the one the slots belong to)
         const auto track = insertTrack();
@@ -4309,6 +4413,41 @@ private:
         const auto track = insertTrack();
         const auto& mixer = engine.getSong().mixer;
         return juce::isPositiveAndBelow (track, (int) mixer.size()) && mixer[(std::size_t) track].muted;
+    }
+
+    TrackEq insertEq() const
+    {
+        const auto track = insertTrack();
+        const auto& mixer = engine.getSong().mixer;
+        return juce::isPositiveAndBelow (track, (int) mixer.size()) ? mixer[(std::size_t) track].eq : TrackEq {};
+    }
+
+    // The insert's built-in EQ: one band's gain, into the same TrackEq the Mixer's EQ editor writes, so the two windows
+    // see each other's changes
+    void setStripEqGain (int band, double gainDb)
+    {
+        const auto track = insertTrack();
+        if (track < 0 || ! juce::isPositiveAndBelow (band, 3))
+            return;
+        auto eq = insertEq();
+        const auto v = (float) juce::jlimit (-18.0, 18.0, gainDb);
+        if (std::abs (eq.gainDb[(std::size_t) band] - v) < 1.0e-5f)
+            return;
+        eq.gainDb[(std::size_t) band] = v;
+        engine.editSong ([track, eq] (Song& s) {
+            if (juce::isPositiveAndBelow (track, (int) s.mixer.size()))
+                s.mixer[(std::size_t) track].eq = eq;
+        });
+        repaint (stripArea);
+    }
+
+    // the whole EQ (the three bands' frequency and width too): the Mixer's own call-out, anchored on the caption
+    void showInsertEq()
+    {
+        const auto track = insertTrack();
+        if (track < 0 || stripEqCaption.isEmpty())
+            return;
+        showTrackEqEditor (engine, track, localAreaToGlobal (stripEqCaption));
     }
 
     void toggleInsertMute()

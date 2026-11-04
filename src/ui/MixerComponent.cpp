@@ -1728,10 +1728,17 @@ private:
 };
 } // namespace
 
+void showTrackEqEditor (AudioEngine& engine, int t, juce::Rectangle<int> anchorScreenBounds)
+{
+    if (t < 0 || t >= (int) engine.getSong().mixer.size())
+        return;
+    auto editor = std::make_unique<TrackEqEditor> (engine, t);
+    juce::CallOutBox::launchAsynchronously (std::move (editor), anchorScreenBounds.withSize (10, 10), nullptr);
+}
+
 void MixerStrips::showTrackEq (int t)
 {
-    auto editor = std::make_unique<TrackEqEditor> (engine, t);
-    juce::CallOutBox::launchAsynchronously (std::move (editor), getScreenBounds().withSize (10, 10).translated (getMouseXYRelative().x, getMouseXYRelative().y), nullptr);
+    showTrackEqEditor (engine, t, getScreenBounds().withSize (10, 10).translated (getMouseXYRelative().x, getMouseXYRelative().y));
 }
 
 namespace
