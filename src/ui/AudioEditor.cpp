@@ -19,6 +19,7 @@
 #include "core/MeterBallistics.h"
 #include "core/NewtoneFx.h"
 #include "core/NoteEdit.h"
+#include "core/ProjectContents.h"
 #include "core/WaveAnalysis.h"
 #include "core/ValueMath.h"
 #include "engine/SampleLibrary.h"
@@ -3901,6 +3902,33 @@ private:
         refreshStripEffects();
     }
 
+    // a slot traded with its neighbour, as the Mixer's own Move up / Move down (automation follows the swap)
+    void moveStripSlot (int slot, int to)
+    {
+        const auto track = insertTrack();
+        if (track < 0)
+            return;
+        engine.editSongStructural ([track, slot, to] (Song& song) { song.swapEffectSlots (track, slot, to); });
+        refreshStripEffects();
+    }
+
+    // The name this slot shows everywhere (the Mixer, the Browser's Plugin database): a plugin's own id, or the
+    // built-in effect's catalog key. A substitute keeps the name of what it stands for, so it has none to change.
+    void renameStripSlot (int slot)
+    {
+        const auto* slots = insertEffects();
+        if (slots == nullptr || ! juce::isPositiveAndBelow (slot, (int) slots->size()))
+            return;
+        const auto& fx = (*slots)[(std::size_t) slot];
+        const auto key = fx.kind == EffectKind::plugin ? fx.plugin.id : std::string ("lynx:fx:") + effectInfo (fx.kind).name;
+        if (key.empty())
+            return;
+        quickpick::rename (engine, key, juce::String::fromUTF8 (projectcontents::effectSlotName (fx).c_str()), [this] {
+            refreshStripEffects();
+            repaint (stripArea);
+        });
+    }
+
     // the slot's own menu, out of the way of the click that opens it (an empty row adds an effect instead)
     void showStripSlotMenu (int slot)
     {
@@ -3932,9 +3960,15 @@ private:
         juce::PopupMenu menu;
         if (used)
         {
-            menu.addSectionHeader (quickpick::slotName (engine, (*slots)[(std::size_t) slot]));
-            menu.addItem (tr ("Bypass"), true, ! (*slots)[(std::size_t) slot].enabled, [this, slot] { toggleStripSlotBypass (slot); });
+            const auto& fx = (*slots)[(std::size_t) slot];
+            const auto canRename = ! fx.isSubstitute() && (fx.kind != EffectKind::plugin || ! fx.plugin.id.empty());
+            menu.addSectionHeader (quickpick::slotName (engine, fx));
+            menu.addItem (tr ("Bypass"), true, ! fx.enabled, [this, slot] { toggleStripSlotBypass (slot); });
             menu.addSubMenu (tr ("Replace with"), replace);
+            menu.addSeparator();
+            menu.addItem (tr ("Move up"), slot > 0, false, [this, slot] { moveStripSlot (slot, slot - 1); });
+            menu.addItem (tr ("Move down"), slot < (int) slots->size() - 1, false, [this, slot] { moveStripSlot (slot, slot + 1); });
+            menu.addItem (tr ("Rename..."), canRename, false, [this, slot] { renameStripSlot (slot); });
             menu.addSeparator();
             menu.addItem (tr ("Delete"), [this, slot] { deleteStripSlot (slot); });
         }
