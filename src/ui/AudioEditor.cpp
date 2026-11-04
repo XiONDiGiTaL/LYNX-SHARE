@@ -897,6 +897,20 @@ public:
                 showRoutingMenu();
                 return;
             }
+            // the insert's sends: the caption adds or removes a route, a row is dragged for its level
+            if (! stripSendsCaption.isEmpty() && stripSendsCaption.contains (e.getPosition()))
+            {
+                showStripSendsMenu();
+                return;
+            }
+            if (const auto sendRow = stripSendAt (e.getPosition()); sendRow >= 0)
+            {
+                if (e.mods.isPopupMenu())
+                    showStripSendMenu (sendRow);
+                else
+                    beginStripSendDrag (sendRow, e);
+                return;
+            }
             if (const auto slot = stripSlotAt (e.getPosition()); e.mods.isPopupMenu() && slot >= 0)
                 showStripSlotMenu (slot);
             else if (slot >= 0)
@@ -980,6 +994,14 @@ public:
 
     void mouseDrag (const juce::MouseEvent& e) override
     {
+        // a send row: the drag sets that route's level (the Mixer's send knob, taken here)
+        if (stripSendDragRow >= 0)
+        {
+            const auto spec = stripSendSpec (stripSendDragRow);
+            setStripSendValue (stripSendDragRow, stripSendDrag.update (e, spec));
+            ui::showValueTip (*this, stripSendRow (stripSendDragRow), spec.text (stripSendValue (stripSendDragRow)));
+            return;
+        }
         if (drag == Drag::overview)
         {
             centreViewOnOverview (e.x);
@@ -1022,6 +1044,14 @@ public:
 
     void mouseUp (const juce::MouseEvent&) override
     {
+        if (stripSendDragRow >= 0)
+        {
+            stripSendDragRow = -1;
+            stripSendDrag.end();
+            ui::hideValueTip();
+            repaint (stripArea);
+            return;
+        }
         if (drag == Drag::envPoint || drag == Drag::envBend)
         {
             drag = Drag::none;
@@ -1055,25 +1085,34 @@ public:
         const auto fx = stripFxCaption.contains (p);
         const auto name = stripNameArea.contains (p);
         const auto route = stripRoute.contains (p);
-        if (slot != stripHoverSlot || fx != stripHoverFx || name != stripHoverName || route != stripHoverRoute)
+        const auto sendRow = stripSendAt (p);
+        const auto sends = stripSendsCaption.contains (p);
+        if (slot != stripHoverSlot || fx != stripHoverFx || name != stripHoverName || route != stripHoverRoute || sendRow != stripHoverSendRow
+            || sends != stripHoverSendsCaption)
         {
             stripHoverSlot = slot;
             stripHoverFx = fx;
             stripHoverName = name;
             stripHoverRoute = route;
+            stripHoverSendRow = sendRow;
+            stripHoverSendsCaption = sends;
             repaint (stripArea);
         }
-        setMouseCursor (slot >= 0 || fx || name || route ? juce::MouseCursor::PointingHandCursor : juce::MouseCursor::NormalCursor);
+        setMouseCursor (sendRow >= 0 ? juce::MouseCursor::UpDownLeftRightResizeCursor
+                                     : slot >= 0 || fx || name || route || sends ? juce::MouseCursor::PointingHandCursor
+                                                                                : juce::MouseCursor::NormalCursor);
     }
 
     void mouseExit (const juce::MouseEvent&) override
     {
-        if (stripHoverSlot >= 0 || stripHoverFx || stripHoverName || stripHoverRoute)
+        if (stripHoverSlot >= 0 || stripHoverFx || stripHoverName || stripHoverRoute || stripHoverSendRow >= 0 || stripHoverSendsCaption)
         {
             stripHoverSlot = -1;
             stripHoverFx = false;
             stripHoverName = false;
             stripHoverRoute = false;
+            stripHoverSendRow = -1;
+            stripHoverSendsCaption = false;
             repaint (stripArea);
         }
     }
@@ -1083,6 +1122,12 @@ public:
         if (! stripNameArea.isEmpty() && stripNameArea.contains (e.getPosition()))
         {
             renameChannel();
+            return;
+        }
+        if (const auto sendRow = stripSendAt (e.getPosition()); sendRow >= 0)
+        {
+            setStripSendValue (sendRow, unityFader); // 0 dB, as the Mixer's send knob
+            ui::flashValueTip (*this, stripSendRow (sendRow), stripSendSpec (sendRow).text (unityFader));
             return;
         }
         if (doc.audio.empty() || ! waveArea.contains (e.getPosition()))
@@ -3555,20 +3600,23 @@ private:
     juce::Rectangle<int> rulerArea, waveArea, levelArea, overviewArea, infoArea, stripArea;
     // the channel strip: the channel's name, its switches, the insert's effect slots (all painted) and the pan and
     // volume controls
-    static constexpr int stripPad = 8, stripNameHeight = 20, stripRowHeight = 24, stripSlotHeight = 18, stripRouteHeight = 16;
+    static constexpr int stripPad = 8, stripNameHeight = 20, stripRowHeight = 24, stripSlotHeight = 18, stripRouteHeight = 16,
+                         stripSendHeight = 18, maxStripSendRows = 4;
     juce::TextButton stripMute { "Mute" }, stripSolo { "Solo" };
     juce::Slider stripPan { juce::Slider::LinearHorizontal, juce::Slider::NoTextBox };
     juce::Slider stripVolume { juce::Slider::RotaryHorizontalVerticalDrag, juce::Slider::NoTextBox };
     juce::Slider stripFader { juce::Slider::LinearHorizontal, juce::Slider::NoTextBox }; // the routed insert's own fader
     juce::TextButton stripInsMute { "M" };                                               // and its mute switch
     juce::Rectangle<int> stripFxCaption, stripSlots, stripPanCaption, stripPanValue, stripVolCaption, stripVolValue, stripMeter, stripNameArea, stripRoute,
-        stripInsCaption, stripInsValue;
+        stripInsCaption, stripInsValue, stripSendsCaption, stripSends;
     lynx::meters::PeakHold stripLevel;
-    int stripHoverSlot = -1, stripFxTicks = 0;
+    int stripHoverSlot = -1, stripFxTicks = 0, stripHoverSendRow = -1, stripSendDragRow = -1;
     float stripShownLevel = 0.0f, stripShownPeak = 0.0f;
-    bool stripHoverFx = false, stripHoverName = false, stripHoverRoute = false;
-    juce::String fxSignature, stripShownName, stripShownPan, stripShownVol, stripShownInsVol;
+    bool stripHoverFx = false, stripHoverName = false, stripHoverRoute = false, stripHoverSendsCaption = false;
+    ui::ValueDrag stripSendDrag;
+    juce::String fxSignature, stripShownName, stripShownPan, stripShownVol, stripShownInsVol, stripShownSends;
     bool stripShownInsMute = false;
+    int stripShownSendCount = -1;
     IconButton menuButton { "menu", Icon::panelMenu }, undoButton { "undo", Icon::undo }, redoButton { "redo", Icon::redo },
         historyButton { "history", Icon::chevronDown }, recordButton { "record", Icon::record }, recordMenuButton { "recordMenu", Icon::chevronDown },
         playButton { "play", Icon::play }, stopButton { "stop", Icon::stop }, snapButton { "snap", Icon::magnet }, fitButton { "fit", Icon::zoom },
@@ -3660,6 +3708,93 @@ private:
         return -1;
     }
 
+    // The inserts this channel's insert sends to: Master first (while it still goes there), then its other sends in
+    // their order. Master itself sends nowhere, and neither does a channel that plays straight into it.
+    std::vector<int> stripSendTargets() const
+    {
+        std::vector<int> targets;
+        const auto track = insertTrack();
+        const auto& mixer = engine.getSong().mixer;
+        if (track <= 0 || ! juce::isPositiveAndBelow (track, (int) mixer.size()))
+            return targets;
+        const auto& t = mixer[(std::size_t) track];
+        if (t.toMaster)
+            targets.push_back (0);
+        for (const auto& s : t.sends)
+            targets.push_back (s.target);
+        return targets;
+    }
+
+    int stripSendRows() const
+    {
+        return stripSends.isEmpty() ? 0 : juce::jlimit (0, maxStripSendRows, stripSends.getHeight() / stripSendHeight);
+    }
+
+    juce::Rectangle<int> stripSendRow (int row) const
+    {
+        return stripSends.withHeight (stripSendHeight).translated (0, row * stripSendHeight);
+    }
+
+    int stripSendAt (juce::Point<int> p) const
+    {
+        for (int i = 0; i < stripSendRows(); ++i)
+            if (stripSendRow (i).contains (p))
+                return i;
+        return -1;
+    }
+
+    int stripSendTarget (int row) const
+    {
+        const auto targets = stripSendTargets();
+        return juce::isPositiveAndBelow (row, (int) targets.size()) ? targets[(std::size_t) row] : -1;
+    }
+
+    // the route's level as the position the Mixer's send knob shows (0 = -inf dB, unityFader = 0 dB)
+    double stripSendValue (int row) const
+    {
+        const auto target = stripSendTarget (row);
+        return target < 0 ? (double) unityFader : (double) faderPosition (engine.getSong().routeLevel (insertTrack(), target));
+    }
+
+    ui::ValueSpec stripSendSpec (int row) const
+    {
+        const auto target = stripSendTarget (row);
+        const auto name = insertNameForTrack (insertTrack()) + juce::String::fromUTF8 (" \xe2\x86\x92 ") + insertNameForTrack (target) + " - "
+                          + (target == 0 ? tr ("Level to Master") : tr ("Send level"));
+        auto spec = ui::faderSpec (name, unityFader);
+        spec.pixelsForRange = 120.0; // as the Mixer's send knob
+        if (target >= 0)
+            spec.target = AutomationTarget { AutomationTargetKind::mixerSend, insertTrack(), target };
+        return spec;
+    }
+
+    void setStripSendValue (int row, double value)
+    {
+        const auto track = insertTrack();
+        const auto target = stripSendTarget (row);
+        if (track <= 0 || target < 0)
+            return;
+        const auto v = faderGain ((float) value);
+        if (std::abs (v - engine.getSong().routeLevel (track, target)) < 1.0e-5f)
+            return;
+        engine.editSong ([track, target, v] (Song& s) { s.setRouteLevel (track, target, v); });
+        ui::reportTweak (stripSendSpec (row));
+        repaint (stripArea);
+    }
+
+    // a send row's drag: up/down (or Alt/middle-click) for the level, the route's own value contract
+    void beginStripSendDrag (int row, const juce::MouseEvent& e)
+    {
+        if (ui::isResetClick (e))
+        {
+            setStripSendValue (row, unityFader); // 0 dB
+            ui::flashValueTip (*this, stripSendRow (row), stripSendSpec (row).text (unityFader));
+            return;
+        }
+        stripSendDragRow = row;
+        stripSendDrag.begin (e, stripSendValue (row));
+    }
+
     void layoutChannelStrip()
     {
         auto r = stripArea.reduced (stripPad, 6);
@@ -3681,9 +3816,20 @@ private:
         const auto panHeight = r.getHeight() >= volHeight + 110 ? 13 + 20 + 12 + 6 : 0;
         const auto insHeight = r.getHeight() >= volHeight + panHeight + 140 ? 13 + 20 + 6 : 0; // the insert's fader and mute
 
+        // the insert's sends: as many rows as fit while the chain still shows four slots
+        const auto sendBlock = [] (int sendRows) { return 13 + sendRows * stripSendHeight + 6; };
+        const auto canSend = insertTrack() > 0;
+        auto sendRows = canSend && insHeight > 0 ? juce::jmin (maxStripSendRows, (int) stripSendTargets().size()) : 0;
+        while (sendRows > 0 && r.getHeight() - volHeight - panHeight - insHeight - sendBlock (sendRows) < 4 * stripSlotHeight)
+            --sendRows;
+        const auto sendHeight = canSend && insHeight > 0 && r.getHeight() - volHeight - panHeight - insHeight - sendBlock (sendRows) >= 4 * stripSlotHeight
+                                    ? sendBlock (sendRows)
+                                    : 0;
+
         stripFxCaption = r.removeFromTop (juce::jmin (14, juce::jmax (0, r.getHeight())));
         r.removeFromTop (juce::jmin (2, juce::jmax (0, r.getHeight())));
-        const auto rows = juce::jlimit (0, maxEffectSlots, juce::jmax (0, r.getHeight() - volHeight - panHeight - insHeight) / stripSlotHeight);
+        const auto rows = juce::jlimit (0, maxEffectSlots,
+                                        juce::jmax (0, r.getHeight() - volHeight - panHeight - insHeight - sendHeight) / stripSlotHeight);
         stripSlots = r.removeFromTop (rows * stripSlotHeight);
 
         // the insert's fader right under its slots (the two belong together), dropped before the channel's own
@@ -3704,6 +3850,19 @@ private:
             stripInsCaption = stripInsValue = {};
             stripFader.setBounds ({});
             stripInsMute.setBounds ({});
+        }
+
+        // where the insert goes: Master (while it is routed there) and each of its sends, straight under its fader
+        if (sendHeight > 0)
+        {
+            stripSendsCaption = r.removeFromTop (13);
+            stripSends = r.removeFromTop (sendRows * stripSendHeight);
+            r.removeFromTop (juce::jmin (6, juce::jmax (0, r.getHeight())));
+        }
+        else
+        {
+            stripSendsCaption = {};
+            stripSends = {};
         }
 
         if (panHeight > 0)
@@ -3767,6 +3926,7 @@ private:
         paintStripRoute (g);
         paintStripEffects (g);
         paintStripInsertFader (g);
+        paintStripSends (g);
 
         if (! stripPanCaption.isEmpty())
         {
@@ -3875,6 +4035,85 @@ private:
         g.drawFittedText (ui::faderSpec ({}, unityFader).text ((double) insertVolume()), stripInsValue, juce::Justification::centredRight, 1);
     }
 
+    // The insert's routes: Master first (while it is still fed), then each send, the level drawn as a bar and in
+    // dB on the row (the Mixer's send rows, without its routing lane)
+    void paintStripSends (juce::Graphics& g)
+    {
+        using namespace theme;
+        const auto rows = stripSendRows();
+
+        if (! stripSendsCaption.isEmpty())
+        {
+            g.setColour (stripHoverSendsCaption ? colour::accent : colour::textSecondary);
+            g.setFont (font (type::caption));
+            auto caption = caps (tr ("Sends"));
+            // when the block, or its four rows, cannot hold them all, say how many are below
+            if (const auto hidden = (int) stripSendTargets().size() - rows; hidden > 0)
+                caption += "  +" + juce::String (hidden);
+            g.drawFittedText (caption, stripSendsCaption, juce::Justification::centredLeft, 1, 0.7f);
+            if (stripCanAddSend()) // the caption's menu adds one
+            {
+                g.setColour (stripHoverSendsCaption ? colour::accent : colour::textDisabled);
+                g.setFont (font (type::caption, true));
+                g.drawText ("+", stripSendsCaption, juce::Justification::centredRight, false);
+            }
+        }
+
+        for (int i = 0; i < rows; ++i)
+        {
+            const auto b = stripSendRow (i);
+            const auto target = stripSendTarget (i);
+            const auto value = (float) stripSendValue (i);
+            const auto hot = stripHoverSendRow == i || stripSendDragRow == i;
+
+            g.setColour (colour::bg1);
+            g.fillRoundedRectangle (b.toFloat(), radius::sm);
+            const auto inside = b.toFloat().reduced (1.0f);
+            const auto filled = inside.withWidth (inside.getWidth() * juce::jlimit (0.0f, 1.0f, value));
+            if (filled.getWidth() >= 1.0f)
+            {
+                g.setColour (colour::accent.withAlpha (hot ? 0.45f : 0.28f));
+                g.fillRoundedRectangle (filled, 2.0f);
+            }
+            if (hot)
+            {
+                g.setColour (colour::accent.withAlpha (0.8f));
+                g.drawRoundedRectangle (b.toFloat().reduced (0.5f), radius::sm, 1.0f);
+            }
+
+            // where it goes: "M" for Master, the insert's number for a send (the insert's name, when it has one)
+            auto row = b.reduced (5, 0);
+            g.setColour (target == 0 ? colour::textSecondary : colour::accent);
+            g.setFont (font (9.0f, true));
+            g.drawText (target == 0 ? juce::String ("M") : juce::String (target), row.removeFromLeft (11), juce::Justification::centredLeft, false);
+
+            const auto dB = stripSendSpec (i).text ((double) value);
+            const auto dBWidth = juce::jmax (30, b.getWidth() / 3);
+            g.setColour (colour::textPrimary);
+            g.setFont (font (type::caption));
+            g.drawFittedText (dB, row.removeFromRight (dBWidth), juce::Justification::centredRight, 1, 0.7f);
+
+            auto label = insertNameForTrack (target);
+            if (target > 0 && label == tr ("Insert {0}", { juce::String (target) }))
+                label = {}; // the number already names it
+            g.setColour (colour::textPrimary);
+            g.drawFittedText (label, row.reduced (3, 0), juce::Justification::centredLeft, 1, 0.7f);
+        }
+    }
+
+    // whether the caption's menu has anything left to add (the "+")
+    bool stripCanAddSend() const
+    {
+        const auto track = insertTrack();
+        const auto& song = engine.getSong();
+        if (track <= 0 || ! juce::isPositiveAndBelow (track, (int) song.mixer.size()))
+            return false;
+        for (int other = 0; other < (int) song.mixer.size(); ++other)
+            if (other != track && ! song.routes (track, other) && song.canRoute (track, other))
+                return true;
+        return false;
+    }
+
     void paintStripMeter (juce::Graphics& g)
     {
         using namespace theme;
@@ -3949,6 +4188,23 @@ private:
             stripShownInsMute = insertMuted();
             repaint (stripArea);
         }
+
+        // the insert's routes are another window's too (the Mixer's route switch, a Fruity Send slot): read them so the
+        // rows follow, and relayout when their number changed, since that is the block's height
+        const auto targets = stripSendTargets();
+        juce::String sends (track);
+        for (const auto target : targets)
+            sends << "|" << target << "=" << juce::String ((double) faderPosition (engine.getSong().routeLevel (track, target)), 4);
+        if (sends != stripShownSends || (int) targets.size() != stripShownSendCount)
+        {
+            const auto relayout = (int) targets.size() != stripShownSendCount;
+            stripShownSends = sends;
+            stripShownSendCount = (int) targets.size();
+            if (relayout)
+                layoutChannelStrip();
+            repaint (stripArea);
+        }
+
         if (std::abs (stripLevel.level - stripShownLevel) > 0.002f || std::abs (stripLevel.peak - stripShownPeak) > 0.002f)
         {
             stripShownLevel = stripLevel.level;
@@ -4065,6 +4321,58 @@ private:
                 s.mixer[(std::size_t) track].muted = ! s.mixer[(std::size_t) track].muted;
         });
         refreshChannelStrip();
+    }
+
+    // --- the sends (the insert's routes, Master included) ---------------------------------------------------
+    // The caption's menu: every insert as a tick item, so a send is added or taken away without the Mixer's routing
+    // lane. The route itself is made with Song::setRoute, the call the Mixer's own "Remove this send" uses.
+    void showStripSendsMenu()
+    {
+        const auto track = insertTrack();
+        const auto& song = engine.getSong();
+        if (track <= 0 || ! juce::isPositiveAndBelow (track, (int) song.mixer.size()))
+            return;
+
+        const auto toMaster = song.mixer[(std::size_t) track].toMaster;
+        const auto toggle = [this, track] (int target, bool on) {
+            engine.editSong ([track, target, on] (Song& s) { s.setRoute (track, target, ! on); });
+            refreshChannelStrip();
+            repaint (stripArea);
+        };
+
+        juce::PopupMenu menu;
+        menu.addSectionHeader (insertNameForTrack (track) + " - " + tr ("Sends"));
+        menu.addItem (insertNameForTrack (0), true, toMaster, [toggle, toMaster] { toggle (0, toMaster); });
+        menu.addSeparator();
+        for (int other = 1; other < (int) song.mixer.size(); ++other)
+            if (other != track)
+            {
+                const auto on = song.routes (track, other);
+                menu.addItem (juce::String (other) + "  " + insertNameForTrack (other), on || song.canRoute (track, other), on,
+                              [toggle, other, on] { toggle (other, on); });
+            }
+        menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this).withMousePosition());
+    }
+
+    // A route's own menu: its level (type a value, reset, automation), then taking the route away
+    void showStripSendMenu (int row)
+    {
+        const auto track = insertTrack();
+        const auto target = stripSendTarget (row);
+        if (track <= 0 || target < 0)
+            return;
+
+        const auto spec = stripSendSpec (row);
+        juce::PopupMenu menu;
+        menu.addSectionHeader (spec.name + ": " + spec.text (stripSendValue (row)));
+        ui::addValueItems (menu, *this, &engine, spec, stripSendValue (row), [this, row] (double v) { setStripSendValue (row, v); });
+        menu.addSeparator();
+        menu.addItem (target == 0 ? tr ("Remove the route to Master") : tr ("Remove this send"), [this, track, target] {
+            engine.editSong ([track, target] (Song& s) { s.setRoute (track, target, false); });
+            refreshChannelStrip();
+            repaint (stripArea);
+        });
+        menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this).withMousePosition());
     }
 
     void toggleChannelMute()
