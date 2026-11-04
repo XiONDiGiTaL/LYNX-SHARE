@@ -1016,7 +1016,9 @@ inline void sinCos (double x, double& s, double& c) noexcept
     }
 }
 
-#if defined(__x86_64__) || defined(_M_X64)
+#if (defined(__x86_64__) || defined(__i386__)) && (defined(__GNUC__) || defined(__clang__))
+// The AVX path is a second copy of this code under a target attribute, with an inline cpuid; MSVC has neither, so it
+// builds the plain path - the same operations in the same order, just without the AVX dispatch.
 #define OGUN_X86 1
 #define OGUN_INLINE inline __attribute__ ((always_inline))
 bool ogunCpuHasAvx() noexcept

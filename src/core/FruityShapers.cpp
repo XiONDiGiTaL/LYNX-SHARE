@@ -405,6 +405,25 @@ const std::vector<WsPoint>& defaultCurve()
 constexpr double kA[3] = { 0.1473771136010466, 0.48246854276970014, 0.8830050257693731 };
 constexpr double kB[3] = { 0.039151597734460045, 0.3026468483284934, 0.6746159185469639 };
 
+#if defined(_MSC_VER)
+// MSVC has no GNU vector types: the two lanes are two doubles with the operators the half-band uses, so each lane gets
+// the same operations in the same order (and the compiler can still pack the pair).
+struct V2
+{
+    double l0, l1;
+
+    double& operator[] (int i) noexcept { return i == 0 ? l0 : l1; }
+    double operator[] (int i) const noexcept { return i == 0 ? l0 : l1; }
+};
+
+inline V2 operator+ (V2 a, V2 b) noexcept { return { a.l0 + b.l0, a.l1 + b.l1 }; }
+inline V2 operator- (V2 a, V2 b) noexcept { return { a.l0 - b.l0, a.l1 - b.l1 }; }
+inline V2 operator* (V2 a, V2 b) noexcept { return { a.l0 * b.l0, a.l1 * b.l1 }; }
+inline V2 operator* (V2 a, double k) noexcept { return { a.l0 * k, a.l1 * k }; }
+#else
+using V2 = double __attribute__ ((vector_size (16)));
+#endif
+
 struct HalfBand
 {
     // per channel: outputs A1 A2 A3 B1 B2 B3, then the previous inputs of each all-pass
@@ -472,7 +491,6 @@ struct HalfBand
     }
 
 private:
-    using V2 = double __attribute__ ((vector_size (16)));
     static void load (const HalfBand& h0, const HalfBand& h1, V2* s) noexcept
     {
         for (int i = 0; i < 12; ++i)

@@ -18,7 +18,12 @@ std::uint64_t rotl (std::uint64_t x, int k) { return (x << k) | (x >> (32 - k));
 }
 
 FlRand::FlRand (std::uint64_t seed)
+#if defined(_MSC_VER)
+    // local build shim (not part of the PR): MSVC has no __int128; reducing the seed first is equivalent modulo 65537
+    : s0 (seed), s1 ((std::uint64_t) (((seed % 65537ull) * 75ull + 74ull) % 65537ull))
+#else
     : s0 (seed), s1 ((std::uint64_t) (((unsigned __int128) seed * 75u + 74u) % 65537u))
+#endif
 {
 }
 

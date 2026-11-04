@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.22)
 # macOS: Big Sur or newer (universal builds pass -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"); set before project()
 set(CMAKE_OSX_DEPLOYMENT_TARGET "11.0" CACHE STRING "Minimum macOS version")
 
-project(LYNX VERSION 0.1.23 LANGUAGES C CXX)
+project(LYNX VERSION 0.1.24 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -12,6 +12,13 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # FMA; the exact FL engines rely on the plain operation order, as the Windows build compiles them)
 if(NOT MSVC)
     add_compile_options(-ffp-contract=off)
+endif()
+
+if(MSVC)
+    # local build shim (not part of the PR): windows.h defines min/max as macros and rpcndr.h defines `small`
+    add_compile_definitions(NOMINMAX WIN32_LEAN_AND_MEAN _USE_MATH_DEFINES)
+    add_compile_options($<$<COMPILE_LANGUAGE:CXX>:/bigobj>)
+    add_link_options(/STACK:8388608)
 endif()
 
 # FL Slayer's exact engine (x87 arithmetic under its own control word): with GCC 15 at -O1 and above, inlining in this
@@ -330,6 +337,9 @@ if(LYNX_BUILD_APP)
 
     juce_add_gui_app(LYNX
         PRODUCT_NAME "LYNX"
+        # The Windows version resource and JUCE_APPLICATION_VERSION_STRING both come from this property (see the
+        # WIN32 block below for the resource file itself).
+        VERSION ${PROJECT_VERSION}
         COMPANY_NAME "Ka1-S"
         COMPANY_COPYRIGHT "Copyright (C) 2026 Ka1-S. Licensed under the GNU AGPL-3.0."
         DESCRIPTION "LYNX SHARE digital audio workstation"
@@ -342,6 +352,32 @@ if(LYNX_BUILD_APP)
         DOCUMENT_EXTENSIONS lynx flp mid
         HARDENED_RUNTIME_ENABLED FALSE
         PLIST_TO_MERGE "<plist><dict><key>CFBundleName</key><string>LYNX SHARE</string><key>CFBundleDisplayName</key><string>LYNX SHARE</string><key>LSMinimumSystemVersion</key><string>11.0</string><key>NSHighResolutionCapable</key><true/></dict></plist>")
+
+    if(WIN32)
+        # The Windows version resource, from project(LYNX VERSION ...) — the one place the version is set.
+        # resources/LYNX.rc (manifest, both icons, version) includes lynx_version.h, which scripts/build-windows-zig.sh
+        # writes into build-win/ from the same project version. A CMake build used JUCE's generated <target>_resources.rc
+        # instead, and that custom command does not depend on the Info.txt holding the version, so a bump left the
+        # previous FILEVERSION in an already generated file (0.1.21 in a 0.1.23 build). Generate the header here and
+        # point JUCE at the same LYNX.rc, so both builds stamp the same version and carry the same manifest and icons.
+        configure_file(cmake/LynxVersion.h.in "${CMAKE_CURRENT_BINARY_DIR}/generated/lynx_version.h" @ONLY)
+        target_include_directories(LYNX PRIVATE
+            "${CMAKE_CURRENT_SOURCE_DIR}/resources"
+            "${CMAKE_CURRENT_BINARY_DIR}/generated")
+        target_compile_definitions(LYNX PRIVATE "JUCE_USER_DEFINED_RC_FILE=\"LYNX.rc\"")
+        # LYNX.rc carries the manifest (DPI awareness, as the Zig build has always had); the linker would otherwise
+        # embed one of its own and CVTRES fails with "duplicate resource. type:MANIFEST".
+        target_link_options(LYNX PRIVATE /MANIFEST:NO)
+
+        # A resource file generated before this rule still holds the old version: recreate it once.
+        get_target_property(lynx_generated_dir LYNX JUCE_GENERATED_SOURCES_DIRECTORY)
+        if(lynx_generated_dir AND EXISTS "${lynx_generated_dir}/LYNX_resources.rc")
+            file(READ "${lynx_generated_dir}/LYNX_resources.rc" lynx_rc_text)
+            if(NOT lynx_rc_text MATCHES "JUCE_USER_DEFINED_RC_FILE")
+                file(REMOVE "${lynx_generated_dir}/LYNX_resources.rc")
+            endif()
+        endif()
+    endif()
 
     target_sources(LYNX PRIVATE
         src/Main.cpp

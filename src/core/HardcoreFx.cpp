@@ -17,7 +17,11 @@
 
 #include "core/Simd.h"
 #if LYNX_X86
- #include <cpuid.h>
+ #if defined(_MSC_VER)
+  #include <intrin.h>
+ #else
+  #include <cpuid.h>
+ #endif
 #endif
 
 #if defined(__clang__)
@@ -901,6 +905,14 @@ std::unique_ptr<PedalFx> makePedal (int type)
 bool cpuHasAvx()
 {
     static const bool f = [] {
+#if defined(_MSC_VER)
+        int regs[4] = { 0, 0, 0, 0 };
+        __cpuid (regs, 1);
+        const unsigned c = (unsigned) regs[2];
+        if ((c & (1u << 27)) == 0 || (c & (1u << 28)) == 0)
+            return false;
+        return (_xgetbv (0) & 6u) == 6u;
+#else
         unsigned a = 0, b = 0, c = 0, d = 0;
         if (! __get_cpuid (1, &a, &b, &c, &d))
             return false;
@@ -909,10 +921,17 @@ bool cpuHasAvx()
         unsigned lo = 0, hi = 0;
         asm volatile ("xgetbv" : "=a"(lo), "=d"(hi) : "c"(0));
         return (lo & 6u) == 6u;
+#endif
     }();
     return f;
 }
+// MSVC has no target attribute, but mac() only calls this when cpuHasAvx() said yes, so the AVX intrinsics stay where
+// they belong.
+#if defined(_MSC_VER)
+void macAvx (float* acc, const float* h, float x, std::size_t n) noexcept
+#else
 __attribute__ ((target ("avx"))) void macAvx (float* acc, const float* h, float x, std::size_t n) noexcept
+#endif
 {
     const auto vx = _mm256_set1_ps (x);
     std::size_t j = 0;
