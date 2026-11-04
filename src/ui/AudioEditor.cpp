@@ -1,6 +1,7 @@
 #include "ui/AudioEditor.h"
 #include "ui/AudioEditorTools.h"
 #include "ui/BrowserComponent.h"
+#include "ui/Dialogs.h"
 #include "ui/EditorTools.h"
 
 #include <algorithm>
@@ -860,6 +861,13 @@ public:
         // the channel strip: an effect slot (or the caption above the slots) opens the insert's effects window there
         if (stripArea.contains (e.getPosition()))
         {
+            // the name row: Rename and color... (double-click, as the Mixer's title band, or a right-click)
+            if (! stripNameArea.isEmpty() && stripNameArea.contains (e.getPosition()))
+            {
+                if (e.mods.isPopupMenu())
+                    renameChannel();
+                return;
+            }
             if (const auto slot = stripSlotAt (e.getPosition()); e.mods.isPopupMenu() && slot >= 0)
                 showStripSlotMenu (slot);
             else if (slot >= 0)
@@ -1016,27 +1024,35 @@ public:
         const auto p = e.getPosition();
         const auto slot = stripSlotAt (p);
         const auto fx = stripFxCaption.contains (p);
-        if (slot != stripHoverSlot || fx != stripHoverFx)
+        const auto name = stripNameArea.contains (p);
+        if (slot != stripHoverSlot || fx != stripHoverFx || name != stripHoverName)
         {
             stripHoverSlot = slot;
             stripHoverFx = fx;
+            stripHoverName = name;
             repaint (stripArea);
         }
-        setMouseCursor (slot >= 0 || fx ? juce::MouseCursor::PointingHandCursor : juce::MouseCursor::NormalCursor);
+        setMouseCursor (slot >= 0 || fx || name ? juce::MouseCursor::PointingHandCursor : juce::MouseCursor::NormalCursor);
     }
 
     void mouseExit (const juce::MouseEvent&) override
     {
-        if (stripHoverSlot >= 0 || stripHoverFx)
+        if (stripHoverSlot >= 0 || stripHoverFx || stripHoverName)
         {
             stripHoverSlot = -1;
             stripHoverFx = false;
+            stripHoverName = false;
             repaint (stripArea);
         }
     }
 
     void mouseDoubleClick (const juce::MouseEvent& e) override
     {
+        if (! stripNameArea.isEmpty() && stripNameArea.contains (e.getPosition()))
+        {
+            renameChannel();
+            return;
+        }
         if (doc.audio.empty() || ! waveArea.contains (e.getPosition()))
             return;
         // the region under the mouse, else the stretch between the markers around it, else everything
@@ -3511,11 +3527,11 @@ private:
     juce::TextButton stripMute { "Mute" }, stripSolo { "Solo" };
     juce::Slider stripPan { juce::Slider::LinearHorizontal, juce::Slider::NoTextBox };
     juce::Slider stripVolume { juce::Slider::RotaryHorizontalVerticalDrag, juce::Slider::NoTextBox };
-    juce::Rectangle<int> stripFxCaption, stripSlots, stripPanCaption, stripPanValue, stripVolCaption, stripVolValue, stripMeter;
+    juce::Rectangle<int> stripFxCaption, stripSlots, stripPanCaption, stripPanValue, stripVolCaption, stripVolValue, stripMeter, stripNameArea;
     lynx::meters::PeakHold stripLevel;
     int stripHoverSlot = -1, stripFxTicks = 0;
     float stripShownLevel = 0.0f, stripShownPeak = 0.0f;
-    bool stripHoverFx = false;
+    bool stripHoverFx = false, stripHoverName = false;
     juce::String fxSignature, stripShownName, stripShownPan, stripShownVol;
     IconButton menuButton { "menu", Icon::panelMenu }, undoButton { "undo", Icon::undo }, redoButton { "redo", Icon::redo },
         historyButton { "history", Icon::chevronDown }, recordButton { "record", Icon::record }, recordMenuButton { "recordMenu", Icon::chevronDown },
@@ -3611,7 +3627,8 @@ private:
     void layoutChannelStrip()
     {
         auto r = stripArea.reduced (stripPad, 6);
-        r.removeFromTop (stripNameHeight + 6); // the channel's name (painted)
+        stripNameArea = r.removeFromTop (stripNameHeight); // the channel's name: double-click renames and colours it
+        r.removeFromTop (6);
         auto row = r.removeFromTop (stripRowHeight);
         const auto half = juce::jmax (28, (row.getWidth() - 4) / 2);
         stripMute.setBounds (row.removeFromLeft (half));
@@ -3671,10 +3688,22 @@ private:
         const auto* c = channel();
         if (c == nullptr)
             return;
-        auto r = stripArea.reduced (stripPad, 6);
+        auto nameArea = stripNameArea;
+        auto textArea = nameArea;
+        if (c->colour != 0) // the channel's colour, as the Mixer's title band shows it
+        {
+            g.setColour (juce::Colour (c->colour));
+            g.fillRoundedRectangle (textArea.removeFromLeft (3).reduced (0, 3).toFloat(), 1.5f);
+            textArea.removeFromLeft (5);
+        }
         g.setColour (colour::textPrimary);
         g.setFont (font (type::body, true));
-        g.drawFittedText (juce::String::fromUTF8 (c->name.c_str()), r.removeFromTop (stripNameHeight), juce::Justification::centredLeft, 1);
+        g.drawFittedText (juce::String::fromUTF8 (c->name.c_str()), textArea, juce::Justification::centredLeft, 1);
+        if (stripHoverName) // one double-click away from Rename and color...
+        {
+            g.setColour (colour::accent.withAlpha (0.8f));
+            g.fillRect (nameArea.withTop (nameArea.getBottom() - 1).withHeight (1));
+        }
 
         paintStripEffects (g);
 
@@ -3837,6 +3866,26 @@ private:
         const auto name = juce::String::fromUTF8 (c->name.c_str());
         stripMute.setTooltip (tr ("Mute or unmute channel {0}", { name }));
         stripSolo.setTooltip (tr ("Solo channel {0}", { name }));
+    }
+
+    // The channel's name and colour, through the dialog the Channel Rack's rename uses (F2 picks a colour there)
+    void renameChannel()
+    {
+        const auto i = channelIndex();
+        if (i < 0)
+            return;
+        const auto& c = engine.getSong().channels[(std::size_t) i];
+        showNameAndColourDialog (tr ("Rename channel"), juce::String::fromUTF8 (c.name.c_str()), c.colour,
+                                 [this, i] (const juce::String& name, std::uint32_t colour) {
+                                     engine.editSong ([i, n = name.toStdString(), colour] (Song& s) {
+                                         if (! juce::isPositiveAndBelow (i, (int) s.channels.size()))
+                                             return;
+                                         s.channels[(std::size_t) i].name = n;
+                                         s.channels[(std::size_t) i].colour = colour;
+                                     });
+                                     refreshChannelStrip();
+                                     repaint (stripArea);
+                                 });
     }
 
     void toggleChannelMute()
