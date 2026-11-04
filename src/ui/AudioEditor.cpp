@@ -596,6 +596,29 @@ public:
                 repaint (stripArea);
             };
             addAndMakeVisible (stripVolume);
+
+            // the routed insert's own fader and mute, as the Mixer has them: 0 = -inf dB, unityFader = 0 dB
+            stripFader.setRange (0.0, 1.0, 0.001);
+            stripFader.setDoubleClickReturnValue (true, unityFader);
+            stripFader.setMouseClickGrabsKeyboardFocus (false);
+            stripFader.setWantsKeyboardFocus (false);
+            stripFader.setTooltip (tr ("Volume"));
+            stripFader.onValueChange = [this] {
+                const auto track = insertTrack();
+                const auto v = (float) stripFader.getValue();
+                if (track < 0 || std::abs (v - engine.getSong().mixer[(std::size_t) track].volume) < 1.0e-4f)
+                    return;
+                engine.editSong ([track, v] (Song& s) {
+                    if (juce::isPositiveAndBelow (track, (int) s.mixer.size()))
+                        s.mixer[(std::size_t) track].volume = juce::jlimit (0.0f, 1.0f, v);
+                });
+                repaint (stripArea);
+            };
+            addAndMakeVisible (stripFader);
+            stripInsMute.setClickingTogglesState (false);
+            stripInsMute.setTooltip (tr ("Mute the track"));
+            stripInsMute.onClick = [this] { toggleInsertMute(); };
+            addAndMakeVisible (stripInsMute);
             refreshChannelStrip();
             refreshStripEffects(); // (the slots and the buttons' tooltips are read here, then every 10th timer frame)
         }
@@ -3536,12 +3559,16 @@ private:
     juce::TextButton stripMute { "Mute" }, stripSolo { "Solo" };
     juce::Slider stripPan { juce::Slider::LinearHorizontal, juce::Slider::NoTextBox };
     juce::Slider stripVolume { juce::Slider::RotaryHorizontalVerticalDrag, juce::Slider::NoTextBox };
-    juce::Rectangle<int> stripFxCaption, stripSlots, stripPanCaption, stripPanValue, stripVolCaption, stripVolValue, stripMeter, stripNameArea, stripRoute;
+    juce::Slider stripFader { juce::Slider::LinearHorizontal, juce::Slider::NoTextBox }; // the routed insert's own fader
+    juce::TextButton stripInsMute { "M" };                                               // and its mute switch
+    juce::Rectangle<int> stripFxCaption, stripSlots, stripPanCaption, stripPanValue, stripVolCaption, stripVolValue, stripMeter, stripNameArea, stripRoute,
+        stripInsCaption, stripInsValue;
     lynx::meters::PeakHold stripLevel;
     int stripHoverSlot = -1, stripFxTicks = 0;
     float stripShownLevel = 0.0f, stripShownPeak = 0.0f;
     bool stripHoverFx = false, stripHoverName = false, stripHoverRoute = false;
-    juce::String fxSignature, stripShownName, stripShownPan, stripShownVol;
+    juce::String fxSignature, stripShownName, stripShownPan, stripShownVol, stripShownInsVol;
+    bool stripShownInsMute = false;
     IconButton menuButton { "menu", Icon::panelMenu }, undoButton { "undo", Icon::undo }, redoButton { "redo", Icon::redo },
         historyButton { "history", Icon::chevronDown }, recordButton { "record", Icon::record }, recordMenuButton { "recordMenu", Icon::chevronDown },
         playButton { "play", Icon::play }, stopButton { "stop", Icon::stop }, snapButton { "snap", Icon::magnet }, fitButton { "fit", Icon::zoom },
@@ -3652,11 +3679,32 @@ private:
         const auto knob = juce::jlimit (22, 40, r.getWidth() - 8);
         const auto volHeight = r.getHeight() >= 240 ? 13 + knob + 2 + 14 + 6 : 0;
         const auto panHeight = r.getHeight() >= volHeight + 110 ? 13 + 20 + 12 + 6 : 0;
+        const auto insHeight = r.getHeight() >= volHeight + panHeight + 140 ? 13 + 20 + 6 : 0; // the insert's fader and mute
 
         stripFxCaption = r.removeFromTop (juce::jmin (14, juce::jmax (0, r.getHeight())));
         r.removeFromTop (juce::jmin (2, juce::jmax (0, r.getHeight())));
-        const auto rows = juce::jlimit (0, maxEffectSlots, juce::jmax (0, r.getHeight() - volHeight - panHeight) / stripSlotHeight);
+        const auto rows = juce::jlimit (0, maxEffectSlots, juce::jmax (0, r.getHeight() - volHeight - panHeight - insHeight) / stripSlotHeight);
         stripSlots = r.removeFromTop (rows * stripSlotHeight);
+
+        // the insert's fader right under its slots (the two belong together), dropped before the channel's own
+        // controls when the strip is too short to hold everything
+        if (insHeight > 0)
+        {
+            auto captionRow = r.removeFromTop (13);
+            stripInsCaption = captionRow.removeFromLeft (juce::jmax (18, captionRow.getWidth() / 3));
+            stripInsValue = captionRow;
+            auto faderRow = r.removeFromTop (20);
+            stripInsMute.setBounds (faderRow.removeFromRight (24));
+            faderRow.removeFromRight (4);
+            stripFader.setBounds (faderRow);
+            r.removeFromTop (juce::jmin (6, juce::jmax (0, r.getHeight())));
+        }
+        else
+        {
+            stripInsCaption = stripInsValue = {};
+            stripFader.setBounds ({});
+            stripInsMute.setBounds ({});
+        }
 
         if (panHeight > 0)
         {
@@ -3718,6 +3766,7 @@ private:
 
         paintStripRoute (g);
         paintStripEffects (g);
+        paintStripInsertFader (g);
 
         if (! stripPanCaption.isEmpty())
         {
@@ -3813,6 +3862,19 @@ private:
         }
     }
 
+    // the insert's fader: whose it is, where it sits, and what it is set to (the Mixer's own dB read-out)
+    void paintStripInsertFader (juce::Graphics& g)
+    {
+        using namespace theme;
+        if (stripInsValue.isEmpty())
+            return;
+        g.setColour (colour::textSecondary);
+        g.setFont (font (type::caption));
+        g.drawFittedText (caps (tr ("Volume")), stripInsCaption, juce::Justification::centredLeft, 1, 0.7f);
+        g.setColour (colour::textPrimary);
+        g.drawFittedText (ui::faderSpec ({}, unityFader).text ((double) insertVolume()), stripInsValue, juce::Justification::centredRight, 1);
+    }
+
     void paintStripMeter (juce::Graphics& g)
     {
         using namespace theme;
@@ -3855,6 +3917,11 @@ private:
             stripPan.setValue ((double) c->pan, juce::dontSendNotification);
         if (! stripVolume.isMouseButtonDown() && std::abs (stripVolume.getValue() - (double) c->volume) > 1.0e-4)
             stripVolume.setValue ((double) c->volume, juce::dontSendNotification);
+        const auto insVol = insertVolume();
+        if (! stripFader.isMouseButtonDown() && std::abs (stripFader.getValue() - (double) insVol) > 1.0e-4)
+            stripFader.setValue ((double) insVol, juce::dontSendNotification);
+        if (stripInsMute.getToggleState() != insertMuted())
+            stripInsMute.setToggleState (insertMuted(), juce::dontSendNotification);
 
         // the meter shows the output of the insert this channel plays through (the one the slots belong to)
         const auto track = insertTrack();
@@ -3866,7 +3933,9 @@ private:
         const auto name = juce::String::fromUTF8 (c->name.c_str());
         const auto panText = ui::panSpec ({}).text ((double) c->pan);
         const auto volText = ui::percentSpec ({}, 0.78).text ((double) c->volume);
-        if (name != stripShownName || panText != stripShownPan || volText != stripShownVol)
+        const auto insVolText = ui::faderSpec ({}, unityFader).text ((double) insVol);
+        if (name != stripShownName || panText != stripShownPan || volText != stripShownVol || insVolText != stripShownInsVol
+            || insertMuted() != stripShownInsMute)
         {
             if (name != stripShownName) // (the name can be changed right here, in the strip's own row)
             {
@@ -3876,6 +3945,8 @@ private:
             stripShownName = name;
             stripShownPan = panText;
             stripShownVol = volText;
+            stripShownInsVol = insVolText;
+            stripShownInsMute = insertMuted();
             repaint (stripArea);
         }
         if (std::abs (stripLevel.level - stripShownLevel) > 0.002f || std::abs (stripLevel.peak - stripShownPeak) > 0.002f)
@@ -3919,6 +3990,7 @@ private:
         if (track == engine.getSong().channels[(std::size_t) i].mixerTrack)
             return;
         engine.editSong ([i, track] (Song& song) { mixerops::routeChannel (song, i, track); });
+        refreshChannelStrip(); // the insert's fader and mute are another track's now
         refreshStripEffects();
         repaint (stripArea);
     }
@@ -3967,6 +4039,32 @@ private:
                                      refreshChannelStrip();
                                      repaint (stripArea);
                                  });
+    }
+
+    float insertVolume() const
+    {
+        const auto track = insertTrack();
+        const auto& mixer = engine.getSong().mixer;
+        return juce::isPositiveAndBelow (track, (int) mixer.size()) ? mixer[(std::size_t) track].volume : unityFader;
+    }
+
+    bool insertMuted() const
+    {
+        const auto track = insertTrack();
+        const auto& mixer = engine.getSong().mixer;
+        return juce::isPositiveAndBelow (track, (int) mixer.size()) && mixer[(std::size_t) track].muted;
+    }
+
+    void toggleInsertMute()
+    {
+        const auto track = insertTrack();
+        if (track < 0)
+            return;
+        engine.editSong ([track] (Song& s) {
+            if (juce::isPositiveAndBelow (track, (int) s.mixer.size()))
+                s.mixer[(std::size_t) track].muted = ! s.mixer[(std::size_t) track].muted;
+        });
+        refreshChannelStrip();
     }
 
     void toggleChannelMute()
