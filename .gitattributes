@@ -1,0 +1,9 @@
+# Translation tables and the headers generated from them
+# -----------------------------------------------------------------------------------------------------------
+# These files are compared byte for byte: tests/i18n checks inflate the embedded table and require it to equal
+# resources/i18n/<id>.txt, and tools/make_i18n.py builds src/ui/i18n/*.h from those .txt files. Pin them to LF so
+# a Windows checkout (core.autocrlf=true) holds and regenerates exactly the bytes CI does, rather than CRLF text
+# that diffs against the embedded tables.
+resources/i18n/*.txt  text eol=lf
+src/ui/i18n/*.h       text eol=lf
+src/ui/I18nData.h     text eol=lf
