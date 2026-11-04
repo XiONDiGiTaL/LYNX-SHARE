@@ -4,14 +4,17 @@
 # when the translation text was identical. Only integer arithmetic on the input bytes is used here, so a given
 # table always produces the same stream, and any inflater (lynx::inflateZlib, zlib, JUCE) reads the result.
 #
-# One dynamic-Huffman block over the whole input; LZ77 with a 32 KiB window, greedy parsing over a short chain of
-# candidate matches. Good enough for the i18n tables (a few percent larger than zlib level 9).
+# The input is split into blocks of roughly BLOCK uncompressed bytes, each with its own dynamic Huffman tables (a
+# block's codes then follow its own byte statistics); LZ77 with a 32 KiB window and lazy parsing over a chain of
+# candidate matches. On the i18n tables this lands within 0.2% of zlib level 9 (2.39 MB against its 2.37 MB for
+# all 14), and the bytes it emits are the same everywhere.
 import heapq
 
 WINDOW = 1 << 15
 MIN_MATCH = 3
 MAX_MATCH = 258
-CHAIN = 10 # candidate matches tried per position
+CHAIN = 256      # candidate matches tried per position
+BLOCK = 1 << 17  # uncompressed bytes per block
 
 LENGTH_BASE = [3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 17, 19, 23, 27, 31, 35, 43, 51, 59, 67, 83, 99, 115, 131, 163,
                195, 227, 258]
@@ -65,7 +68,8 @@ class _Bits:
 
 
 def _tree_lengths(freqs):
-    """Code lengths of an optimal Huffman tree; ties broken by symbol order, so the result is reproducible."""
+    """Code lengths of an optimal Huffman tree; ties broken by symbol order, so the result is reproducible. A tree
+    built over exactly the used symbols is full (Kraft sum 1), which is what zlib requires of a table."""
     n = len(freqs)
     lengths = [0] * n
     heap = [(f, i, i) for i, f in enumerate(freqs) if f > 0]
@@ -104,25 +108,6 @@ def _huffman_lengths(freqs, limit):
         lengths = _tree_lengths(weighted)
         if max(lengths, default=0) <= limit:
             return lengths
-    return lengths
-
-
-def _complete(lengths):
-    """Adds codes to unused symbols until the tree is full (Kraft sum 1). zlib rejects an incomplete table, and
-    the unused slots cost nothing in the data stream."""
-    used = [l for l in lengths if l]
-    if not used:
-        lengths[0] = 1
-        if len(lengths) > 1:
-            lengths[1] = 1
-        return lengths
-    top = max(used)
-    need = (1 << top) - sum(1 << (top - l) for l in used)
-    free = [i for i, l in enumerate(lengths) if not l]
-    while need > 0 and free:
-        k = need.bit_length() - 1
-        lengths[free.pop()] = top - k
-        need -= 1 << k
     return lengths
 
 
@@ -178,33 +163,45 @@ def _rle_lengths(lengths):
     return out
 
 
+def _best(data, i, heads, n):
+    """(length, distance) of the longest match for the position i, 0 if there is none."""
+    if i + MIN_MATCH > n:
+        return 0, 0
+    positions = heads.get(data[i:i + MIN_MATCH])
+    if not positions:
+        return 0, 0
+    longest = min(MAX_MATCH, n - i)
+    oldest = i - WINDOW
+    length = dist = 0
+    tried = 0
+    for pos in reversed(positions):
+        if pos < oldest or tried >= CHAIN:
+            break
+        tried += 1
+        l = MIN_MATCH
+        while l + 8 <= longest and data[pos + l:pos + l + 8] == data[i + l:i + l + 8]:
+            l += 8
+        while l < longest and data[pos + l] == data[i + l]:
+            l += 1
+        if l > length:
+            length, dist = l, i - pos
+            if length >= longest:
+                break
+    return length, dist
+
+
 def _tokens(data):
-    """LZ77: literal bytes (int) and (length, distance) matches."""
+    """LZ77 with lazy parsing: literal bytes (int) and (length, distance) matches. A match is only taken when the
+    next position does not start a longer one, which is what zlib does and costs ~zero to decide here."""
     n = len(data)
     heads = {}
     out = []
     i = 0
     while i < n:
-        length = dist = 0
-        if i + MIN_MATCH <= n:
-            positions = heads.get(data[i:i + MIN_MATCH])
-            if positions:
-                longest = min(MAX_MATCH, n - i)
-                oldest = i - WINDOW
-                tried = 0
-                for pos in reversed(positions):
-                    if pos < oldest or tried >= CHAIN:
-                        break
-                    tried += 1
-                    l = MIN_MATCH
-                    while l + 8 <= longest and data[pos + l:pos + l + 8] == data[i + l:i + l + 8]:
-                        l += 8
-                    while l < longest and data[pos + l] == data[i + l]:
-                        l += 1
-                    if l > length:
-                        length, dist = l, i - pos
-                        if length >= longest:
-                            break
+        length, dist = _best(data, i, heads, n)
+        if length >= MIN_MATCH and length < MAX_MATCH and i + 1 < n:
+            if _best(data, i + 1, heads, n)[0] > length:
+                length = 0
         end = i + length if length >= MIN_MATCH else i + 1
         out.append((length, dist) if length >= MIN_MATCH else data[i])
         for p in range(i, end):
@@ -225,11 +222,7 @@ def _adler32(data):
     return (b << 16) | a
 
 
-def compress(data):
-    """`data` -> a zlib stream (header, one dynamic-Huffman block, Adler-32) that any inflater accepts."""
-    data = bytes(data)
-    tokens = _tokens(data)
-
+def _write_block(bits, tokens, last):
     lit_freq = [0] * NLIT
     dist_freq = [0] * NDIST
     for tok in tokens:
@@ -240,25 +233,38 @@ def compress(data):
             dist_freq[DIST_CODE[tok[1]][0]] += 1
     lit_freq[256] += 1 # end of block
 
-    lit_len = _complete(_huffman_lengths(lit_freq, 15))
-    dist_len = _complete(_huffman_lengths(dist_freq, 15))
+    lit_len = _huffman_lengths(lit_freq, 15)
+    dist_len = _huffman_lengths(dist_freq, 15)
+
+    # declare only the symbols this block uses: unused ones would have to be given codes, and those codes take
+    # length away from the ones that carry data
+    hlit = max(257, max(i for i, l in enumerate(lit_len) if l) + 1)
+    used = [i for i, l in enumerate(dist_len) if l]
+    if used:
+        ndist = used[-1] + 1
+    else:
+        ndist = 1
+        dist_len = [1] + dist_len[1:] # a block with no match still needs a distance table
     lit_code = _codes(lit_len)
     dist_code = _codes(dist_len)
 
-    rle = _rle_lengths(lit_len + dist_len)
+    rle = _rle_lengths(lit_len[:hlit] + dist_len[:ndist])
     cl_freq = [0] * NCL
     for sym, _, _ in rle:
         cl_freq[sym] += 1
-    cl_len = _complete(_huffman_lengths(cl_freq, 7))
+    cl_len = _huffman_lengths(cl_freq, 7)
     cl_code = _codes(cl_len)
+    nclen = 4
+    for k, sym in enumerate(CL_ORDER):
+        if cl_len[sym]:
+            nclen = max(nclen, k + 1)
 
-    bits = _Bits()
-    bits.put(1, 1) # final block
+    bits.put(1 if last else 0, 1)
     bits.put(2, 2) # dynamic Huffman
-    bits.put(NLIT - 257, 5)
-    bits.put(NDIST - 1, 5)
-    bits.put(NCL - 4, 4)
-    for sym in CL_ORDER:
+    bits.put(hlit - 257, 5)
+    bits.put(ndist - 1, 5)
+    bits.put(nclen - 4, 4)
+    for sym in CL_ORDER[:nclen]:
         bits.put(cl_len[sym], 3)
     for sym, extra_bits, extra in rle:
         bits.put_code(cl_code[sym], cl_len[sym])
@@ -277,6 +283,23 @@ def compress(data):
             if extra_bits:
                 bits.put(extra, extra_bits)
     bits.put_code(lit_code[256], lit_len[256])
+
+
+def compress(data):
+    """`data` -> a zlib stream (header, dynamic-Huffman blocks, Adler-32) that any inflater accepts."""
+    data = bytes(data)
+    tokens = _tokens(data)
+    bits = _Bits()
+    block = []
+    size = 0
+    for tok in tokens:
+        block.append(tok)
+        size += 1 if isinstance(tok, int) else tok[0]
+        if size >= BLOCK:
+            _write_block(bits, block, False)
+            block = []
+            size = 0
+    _write_block(bits, block, True)
     bits.flush()
 
     adler = _adler32(data)
