@@ -14,7 +14,7 @@ WINDOW = 1 << 15
 MIN_MATCH = 3
 MAX_MATCH = 258
 CHAIN = 256      # candidate matches tried per position
-BLOCK = 1 << 17  # uncompressed bytes per block
+BLOCK = 1 << 18  # uncompressed bytes per block
 
 LENGTH_BASE = [3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 17, 19, 23, 27, 31, 35, 43, 51, 59, 67, 83, 99, 115, 131, 163,
                195, 227, 258]
@@ -163,29 +163,33 @@ def _rle_lengths(lengths):
     return out
 
 
-def _best(data, i, heads, n):
-    """(length, distance) of the longest match for the position i, 0 if there is none."""
+def _scan(d, i, positions, n):
+    """Longest match for the position i, over candidates that all share d[i:i+3]. A candidate whose fourth byte
+    differs can only ever reach three bytes, which is worth recording but not worth measuring: skipping the length
+    computation for it is most of the search's speed, and it changes no token."""
     if i + MIN_MATCH > n:
         return 0, 0
-    positions = heads.get(data[i:i + MIN_MATCH])
-    if not positions:
-        return 0, 0
-    longest = min(MAX_MATCH, n - i)
+    longest = MAX_MATCH if n - i > MAX_MATCH else n - i
     oldest = i - WINDOW
+    fourth = d[i + 3] if i + 4 <= n else -1
     length = dist = 0
     tried = 0
     for pos in reversed(positions):
         if pos < oldest or tried >= CHAIN:
             break
         tried += 1
-        l = MIN_MATCH
-        while l + 8 <= longest and data[pos + l:pos + l + 8] == data[i + l:i + l + 8]:
+        if fourth >= 0 and d[pos + 3] != fourth:
+            if length == 0:
+                length, dist = MIN_MATCH, i - pos
+            continue
+        l = MIN_MATCH + 1 if fourth >= 0 else MIN_MATCH
+        while l + 8 <= longest and d[pos + l:pos + l + 8] == d[i + l:i + l + 8]:
             l += 8
-        while l < longest and data[pos + l] == data[i + l]:
+        while l < longest and d[pos + l] == d[i + l]:
             l += 1
         if l > length:
             length, dist = l, i - pos
-            if length >= longest:
+            if l >= longest:
                 break
     return length, dist
 
@@ -198,9 +202,13 @@ def _tokens(data):
     out = []
     i = 0
     while i < n:
-        length, dist = _best(data, i, heads, n)
+        length = dist = 0
+        if i + MIN_MATCH <= n:
+            positions = heads.get(data[i:i + MIN_MATCH])
+            if positions:
+                length, dist = _scan(data, i, positions, n)
         if length >= MIN_MATCH and length < MAX_MATCH and i + 1 < n:
-            if _best(data, i + 1, heads, n)[0] > length:
+            if _scan(data, i + 1, heads.get(data[i + 1:i + 4]) or (), n)[0] > length:
                 length = 0
         end = i + length if length >= MIN_MATCH else i + 1
         out.append((length, dist) if length >= MIN_MATCH else data[i])
