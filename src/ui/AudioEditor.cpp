@@ -3829,6 +3829,11 @@ private:
         const auto volText = ui::percentSpec ({}, 0.78).text ((double) c->volume);
         if (name != stripShownName || panText != stripShownPan || volText != stripShownVol)
         {
+            if (name != stripShownName) // (the name can be changed right here, in the strip's own row)
+            {
+                stripMute.setTooltip (tr ("Mute or unmute channel {0}", { name }));
+                stripSolo.setTooltip (tr ("Solo channel {0}", { name }));
+            }
             stripShownName = name;
             stripShownPan = panText;
             stripShownVol = volText;
@@ -3863,9 +3868,6 @@ private:
             return;
         fxSignature = signature;
         repaint (stripArea);
-        const auto name = juce::String::fromUTF8 (c->name.c_str());
-        stripMute.setTooltip (tr ("Mute or unmute channel {0}", { name }));
-        stripSolo.setTooltip (tr ("Solo channel {0}", { name }));
     }
 
     // The channel's name and colour, through the dialog the Channel Rack's rename uses (F2 picks a colour there)
