@@ -1,5 +1,6 @@
 // Core tests (no JUCE). Usage: lynx_tests [folder-with-flp-files]
 
+#include <algorithm>
 #include <optional>
 #include <atomic>
 #include <chrono>
@@ -6478,7 +6479,13 @@ namespace i18ntest
 std::string readFile (const std::filesystem::path& path)
 {
     std::ifstream in (path, std::ios::binary);
-    return { std::istreambuf_iterator<char> (in), std::istreambuf_iterator<char>() };
+    std::string text { std::istreambuf_iterator<char> (in), std::istreambuf_iterator<char>() };
+
+    // A Windows checkout (core.autocrlf) writes the sources and the tables with CRLF; CI checks out LF. Strip the CR so
+    // both read the same: a tr() whose literals span lines joins across the break, and the embedded tables (built from
+    // LF text by tools/make_i18n.py) compare equal.
+    text.erase (std::remove (text.begin(), text.end(), '\r'), text.end());
+    return text;
 }
 
 std::string unescape (const std::string& s)

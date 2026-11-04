@@ -26,7 +26,9 @@ for stale in folder.glob("*.h"):
     if stale.stem not in ids:
         stale.unlink()
 for lang in ids:
-    data = (root / f"resources/i18n/{lang}.txt").read_bytes()
+    # embed the text with LF line breaks whatever the checkout: a Windows working copy (core.autocrlf) has CRLF, and the
+    # headers must come out byte-identical to the ones CI generates from an LF checkout
+    data = (root / f"resources/i18n/{lang}.txt").read_bytes().replace(b"\r\n", b"\n")
     packed = zlib.compress(data, 9)
     name = "t_" + lang.replace("-", "_")
     names.append((lang, name, len(packed), len(data)))
@@ -37,7 +39,7 @@ for lang in ids:
     for i in range(0, len(packed), 32):
         part.append(",".join(str(b) for b in packed[i:i + 32]) + ",")
     part += ["};", "} // namespace lynx::i18n::data", ""]
-    (folder / f"{lang}.h").write_text("\n".join(part))
+    (folder / f"{lang}.h").write_text("\n".join(part), encoding="utf-8", newline="\n")
     out.append(f'#include "ui/i18n/{lang}.h"')
 out += ["", "namespace lynx::i18n::data", "{", "inline constexpr Table tables[] = {"]
 for lang, name, n, size in names:
@@ -45,5 +47,5 @@ for lang, name, n, size in names:
 out.append("};")
 out.append("} // namespace lynx::i18n::data")
 out.append("")
-(root / "src/ui/I18nData.h").write_text("\n".join(out))
+(root / "src/ui/I18nData.h").write_text("\n".join(out), encoding="utf-8", newline="\n")
 print(f"{len(names)} table(s) -> src/ui/i18n/*.h + src/ui/I18nData.h")
